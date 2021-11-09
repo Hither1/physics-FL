@@ -1,5 +1,4 @@
 import numpy as np
-import tensorflow as tf
 import torch as tc
 import torch.nn as nn
 import math
@@ -56,7 +55,7 @@ def bias_initialize(shape, layer, distribution=''):
 
 
 class omega_net(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, device):
         super().__init__()
         """Create the auxiliary (omega) network(s), which have ycoords as input and output omegas (parameters for L).
             Arguments:
@@ -68,32 +67,33 @@ class omega_net(nn.Module):
                 biases -- dictionary of biases
             """
         self.params = params
+        self.device = device
 
         self.omega_parameters, self.omega_nets_complex, self.omega_nets_real = [], [], []
         for j in np.arange(params['num_complex_pairs']):
             if params['act_type'] == "sigmoid":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_complex'], params['scale_omega']),
+                    params['widths_omega_complex'], params['scale_omega'], device=self.device),
                     nn.Sigmoid())
             elif self.params['act_type'] == "relu":
                 omega_net = nn.Sequential(
-                    decoder(params['widths_omega_complex'], params['scale_omega'], self.params['act_type']),
+                    decoder(params['widths_omega_complex'], params['scale_omega'], self.params['act_type'], device=self.device),
                     nn.ReLU())
             elif self.params['act_type'] == "elu":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_complex'], params['scale_omega'], self.params['act_type']), nn.ELU(True))
+                    params['widths_omega_complex'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ELU(True))
             self.omega_parameters += list(omega_net.parameters())
             self.omega_nets_complex.append(omega_net)
         for j in np.arange(params['num_real']):
             if self.params['act_type'] == "sigmoid":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_real'], params['scale_omega'], self.params['act_type']), nn.Sigmoid(True))
+                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.Sigmoid(True))
             elif self.params['act_type'] == "relu":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_real'], params['scale_omega'], self.params['act_type']), nn.ReLU())
+                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ReLU())
             elif self.params['act_type'] == "elu":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_real'], params['scale_omega'], self.params['act_type']), nn.ELU(True))
+                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ELU(True))
             self.omega_parameters += list(omega_net.parameters())
             self.omega_nets_real.append(omega_net)
 
@@ -120,21 +120,22 @@ class omega_net(nn.Module):
             pair_of_columns = ycoords[:, ind:ind + 2]
             radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
             omegas.append(
-                self.omega_nets_complex[j](radius_of_pair))
+                self.omega_nets_complex[j](tc.tensor(radius_of_pair, device=self.device)))
 
         for j in np.arange(self.params['num_real']):
             ind = 2 * self.params['num_complex_pairs'] + j
             one_column = ycoords[:, ind]
             omegas.append(
-                self.omega_nets_real[j](one_column[:, np.newaxis]))
+                self.omega_nets_real[j](tc.tensor(one_column[:, np.newaxis],device=self.device)))
 
         return omegas
 
 
 class encoder(nn.Module):
-    def __init__(self, encoder_widths, dist_weights, dist_biases, act_type, scale, shifts_middle,
+    def __init__(self, encoder_widths, dist_weights, dist_biases, act_type, scale, device, shifts_middle,
                  num_encoder_weights=1):
         super().__init__()
+        self.device = device
         self.shifts_middle = shifts_middle
         """Create an encoder network: an input placeholder x, dictionary of weights, and dictionary of biases.
                         Arguments:
@@ -176,7 +177,7 @@ class encoder(nn.Module):
             if isinstance(x, (list,)):
                 x_shift = x[shift]
             else:
-                x_shift = tc.squeeze(tc.tensor(x[shift, :], dtype=tc.float32))
+                x_shift = tc.squeeze(tc.tensor(x[shift, :], device=self.device, dtype=tc.float32))
 
             y.append(self.encoder(x_shift))
 
@@ -184,7 +185,7 @@ class encoder(nn.Module):
 
 
 class decoder(nn.Module):
-    def __init__(self, decoder_widths, scale, act_type):
+    def __init__(self, decoder_widths, scale, act_type, device):
         super().__init__()
         layers = []
         for i in np.arange(len(decoder_widths) - 1):
@@ -200,16 +201,19 @@ class decoder(nn.Module):
                 layers.append(nn.ELU(True))
 
         self.decoder = nn.Sequential(*layers)
+        self.device = device
+        self.to(self.device)
 
     def forward(self, x):
         return self.decoder(x)
 
 
 class koopman_net(nn.Module):
-    def __init__(self, params, device='cude', task='Pendulum'):
+    def __init__(self, params, device='cuda', task='Pendulum'):
         super().__init__()
         self.params = params
         self.task = task
+        self.device = device
         # self.linear = nn.Linear(256, 2)
         """Create a Koopman network that encodes, advances in time, and decodes.
             Arguments:
@@ -233,12 +237,13 @@ class koopman_net(nn.Module):
                                dist_biases=params['dist_biases'][0:depth + 1],
                                act_type=params['act_type'],
                                scale=params['scale'],
+                               device=self.device,
                                shifts_middle=params['shifts_middle'])
         self.model_params = list(self.encoder.parameters())
-        self.omega = omega_net(params)
+        self.omega = omega_net(params, self.device)
         # params['num_encoder_weights'] = len(weights)/already done inside create_omega_net
         self.model_params += self.omega.omega_parameters
-        self.decoder = decoder(decoder_widths, params['scale'], params['act_type'])
+        self.decoder = decoder(decoder_widths, params['scale'], params['act_type'], device=self.device)
         self.model_params += list(self.decoder.parameters())
 
         params['num_decoder_weights'] = depth + 1
@@ -451,7 +456,7 @@ class koopman_net(nn.Module):
         g_list = self.encoder(x)
 
         encoded_layer = g_list[0]
-        omegas = self.omega(g_list[0])
+        omegas = self.omega(tc.tensor(g_list[0], device=self.device))
 
         y = []  # y[0] is x[0,:,:] encoded and then decoded (no stepping forward)
         y.append(self.decoder(encoded_layer))
@@ -541,7 +546,7 @@ class koopman_net(nn.Module):
                                                                'len_time'] + j + new_len_time,
                                                            :]
 
-        self.sampleset_training.append(data_tensor)
+        self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
 
         # self.sampleset_training.append(tc.tensor(sample_batch, dtype=tc.float))
 

@@ -1,7 +1,6 @@
 import sys as sys
 from GlobalParameters import *
-from Dependency.Model import *
-
+import torch as tc
 
 
 def __distance__(current_local_model: dict, target_local_model: dict):
