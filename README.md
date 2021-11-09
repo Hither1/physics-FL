@@ -1,1 +1,1 @@
-# physics-FL
+# physics-guided-federated-learning
