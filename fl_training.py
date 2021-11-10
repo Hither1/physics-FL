@@ -52,7 +52,7 @@ params['L1_lam'] = 0.0
 params['auto_first'] = 1
 
 # settings related to training
-params['num_passes_per_file'] = 15 * 6 #* 50
+params['num_passes_per_file'] = 15 * 6 * 50
 params['num_steps_per_batch'] = 2
 params['learning_rate'] = 10 ** (-3)
 
@@ -108,6 +108,7 @@ def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, 
     network.load_state_dict(init_model)
     pipe_download.recv()
     data_val_tensor = network.SetTestingSet()
+    best_error = 10000
     for f in range(params['data_train_len'] * params['num_passes_per_file']):
         #if finished:
            # break
@@ -136,7 +137,7 @@ def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, 
                 x, y, g_list = network.forward(data_val_tensor)
                 val_error, reg_val_err = network.physics_informed_loss(params, x, y, g_list)
                 if val_error < (best_error - best_error * (10 ** (-5))):
-                    best_error = val_error.copy()
+                    best_error = val_error #.copy()
                     print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
                         best_error, reg_train_err, reg_val_err))
 

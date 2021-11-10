@@ -386,7 +386,7 @@ class koopman_net(nn.Module):
             [tc.norm(tc.tensor(t), 2) for t in self.model_params])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = params['L2_lam'] * l2_regularizer
 
-        regularized_loss = self.loss + loss_L1 + loss_L2
+        regularized_loss = loss + loss_L1 + loss_L2
         regularized_loss1 = loss1 + loss_L1 + loss_L2
         return loss, regularized_loss  # regularized_loss -- loss + regularization
 
@@ -488,8 +488,7 @@ class koopman_net(nn.Module):
             return
         for sample_batch in self.sampleset_training:
             x, y, g_list = self.forward(sample_batch)
-            loss = self.physics_informed_loss(self.params, x, y, g_list)
-            print("Current loss", loss)
+            loss, regularized_loss = self.physics_informed_loss(self.params, x, y, g_list)
             if (not self.params['been5min']) and self.params['auto_first']:
                 self.optimizer_autoencoder.zero_grad()
                 loss.backward()
