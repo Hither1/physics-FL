@@ -106,10 +106,45 @@ def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, 
     print(params['widths'])
     network = net.koopman_net(params, device=device, task=task)
     network.load_state_dict(init_model)
-    network.SetTrainingSet() #f'./data/SIR_train_{int((worker_id)%3)}.csv'
     pipe_download.recv()
-    while True:
-        network.Train(epoch=local_epoch_num)
+    data_val_tensor = network.SetTestingSet()
+    for f in range(params['data_train_len'] * params['num_passes_per_file']):
+        #if finished:
+           # break
+        file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
+        if (params['data_train_len'] > 1) or (f == 0):
+            # don't keep reloading data if always same
+            data_train_tensor = network.SetTrainingSet()
+            num_examples = data_train_tensor.shape[1]
+            num_batches = int(np.floor(num_examples / params['batch_size']))
+
+        ind = np.arange(num_examples)
+        np.random.shuffle(ind)
+        data_train_tensor = data_train_tensor[:, ind, :]
+        for step in range(params['num_steps_per_batch'] * num_batches):
+            if params['batch_size'] < data_train_tensor.shape[1]:
+                offset = (step * params['batch_size']) % (num_examples - params['batch_size'])
+            else:
+                offset = 0
+
+            batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
+            network.Train()
+
+            if step % 20 == 0:
+                x, y, g_list = network.forward(data_train_tensor)
+                train_error, reg_train_err = network.physics_informed_loss(params, x, y, g_list)
+                x, y, g_list = network.forward(data_val_tensor)
+                val_error, reg_val_err = network.physics_informed_loss(params, x, y, g_list)
+                if val_error < (best_error - best_error * (10 ** (-5))):
+                    best_error = val_error.copy()
+                    print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
+                        best_error, reg_train_err, reg_val_err))
+
+
+            if step > params['num_steps_per_file_pass']:
+                params['stop_condition'] = 'reached num_steps_per_file_pass'
+                break
+
         if device == 'cuda':
             tp = copy.deepcopy(network)
             tp.to('cpu')
@@ -216,8 +251,6 @@ if __name__ == '__main__':
             model_pipeline_upload.append(processing.Pipe())
             model_pipeline_download.append(processing.Pipe())
             if i < num_worker:
-                # creating a benign worker procesis
-                print("test model states", len(test_model.state_dict()))
                 process_pool.append(processing.Process(target=LocalTraining, args=(
                     i, test_model.state_dict().copy(), model_pipeline_upload[i][1], model_pipeline_download[i][0], params)))
 

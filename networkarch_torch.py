@@ -372,14 +372,13 @@ class koopman_net(nn.Module):
             tc.norm(tc.norm(y[1] - tc.squeeze(tc.tensor(x[1, :, :])), p=np.inf, dim=1), p=np.inf), Linf2_den)
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
 
-        self.loss = loss1 + loss2 + loss3 + loss_Linf
+        loss = loss1 + loss2 + loss3 + loss_Linf
         # ==== Define the regularization and add to loss. ====
         #         regularized_loss1 -- loss1 (autoencoder loss) + regularization
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
             l1_regularizer = tc.nn.L1Loss(
-                size_average=False)  # tf.contrib.layers.l1_regularizer(scale=params['L1_lam'], scope=None)
-            # TODO: don't include biases? use weights dict instead?
-            loss_L1 = tc.norm(self.model_params, 1)  # tf.contrib.layers.apply_regularization(l1_regularizer)
+                size_average=False)
+            loss_L1 = tc.norm(self.model_params, 1)
         else:
             loss_L1 = tc.tensor([1, ], dtype=tc.float64)
 
@@ -389,7 +388,7 @@ class koopman_net(nn.Module):
 
         regularized_loss = self.loss + loss_L1 + loss_L2
         regularized_loss1 = loss1 + loss_L1 + loss_L2
-        return regularized_loss  # regularized_loss -- loss + regularization
+        return loss, regularized_loss  # regularized_loss -- loss + regularization
 
     def form_complex_conjugate_block(self, omegas, delta_t):
         """Form a 2x2 block for a complex conj. pair of eigenvalues, but for each example, so dimension [None, 2, 2]
@@ -483,30 +482,33 @@ class koopman_net(nn.Module):
 
         return x, y, g_list
 
-    def Train(self, epoch: int = 1):
+    def Train(self):
         if self.sampleset_training == []:
             print("Please set training set before training.")
             return
-        for i in range(0, epoch):
-            for sample_batch in self.sampleset_training:
-                x, y, g_list = self.forward(sample_batch)
-                loss = self.physics_informed_loss(self.params, x, y, g_list)
-                print("Current loss", loss)
-                if (not self.params['been5min']) and self.params['auto_first']:
-                    self.optimizer_autoencoder.zero_grad()
-                    loss.backward()
-                    self.optimizer_autoencoder.step()
-                else:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+        for sample_batch in self.sampleset_training:
+            x, y, g_list = self.forward(sample_batch)
+            loss = self.physics_informed_loss(self.params, x, y, g_list)
+            print("Current loss", loss)
+            if (not self.params['been5min']) and self.params['auto_first']:
+                self.optimizer_autoencoder.zero_grad()
+                loss.backward()
+                self.optimizer_autoencoder.step()
+            else:
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
         self.history_loss_train.append(float(loss))
 
     def SetTestingSet(self):
         data = np.loadtxt(('./data/%s/%s_val_x.csv' % (self.params['data_name'], self.params['data_name'])), delimiter=',', dtype=np.float64)
-        print('start set test set')
         nd = data.ndim
+        max_shifts_to_stack = 1
+        if self.params['num_shifts']:
+            max_shifts_to_stack = max(max_shifts_to_stack, max(self.params['shifts']))
+        if self.params['num_shifts_middle']:
+            max_shifts_to_stack = max(max_shifts_to_stack, max(self.params['shifts_middle']))
 
         if nd > 1:
             n = data.shape[1]
@@ -515,16 +517,15 @@ class koopman_net(nn.Module):
             n = 1
         num_traj = int(data.shape[0] / self.params['len_time'])
 
-        new_len_time = self.params['len_time'] - self.params['num_shifts']
+        new_len_time = self.params['len_time'] - max_shifts_to_stack
 
-        data_tensor = np.zeros([self.params['num_shifts'] + 1, num_traj * new_len_time, n])
+        data_tensor = np.zeros([max_shifts_to_stack + 1, num_traj * new_len_time, n])
 
-        for j in np.arange(self.params['num_shifts'] + 1):
+        for j in np.arange(max_shifts_to_stack + 1):
             for count in np.arange(num_traj):
                 data_tensor_range = np.arange(count * new_len_time, new_len_time + count * new_len_time)
                 data_tensor[j, data_tensor_range, :] = data[count * self.params['len_time'] + j: count * self.params['len_time'] + j + new_len_time,
                                                        :]
-        print('finish set test set')
         return data_tensor
 
 
@@ -557,7 +558,4 @@ class koopman_net(nn.Module):
                                                            :]
 
         self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
-
-        # self.sampleset_training.append(tc.tensor(sample_batch, dtype=tc.float))
-
-        # self.size_trainingset
+        return data_tensor
