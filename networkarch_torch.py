@@ -503,20 +503,30 @@ class koopman_net(nn.Module):
 
         self.history_loss_train.append(float(loss))
 
-    def SetTestingSet(self, abs_path: str):
-        self.sampleset_testing_benign = []
-        self.labelset_testing_benign = []
-        with open(abs_path, 'r', encoding='utf-8', newline='') as f:
-            reader = csv.reader(f)
-            sample_batch = []
-            for row in reader:
-                tp = []
-                for f in row[1:]:
-                    tp.append(float(f) / 255)
-                sample_batch.append(np.array(tp))
+    def SetTestingSet(self):
+        data = np.loadtxt(('./data/%s/%s_val_x.csv' % (self.params['data_name'], self.params['data_name'])), delimiter=',', dtype=np.float64)
+        print('start set test set')
+        nd = data.ndim
 
-            self.sampleset_testing_benign = tc.tensor(sample_batch, device=self.device, dtype=tc.float)
-            sample_batch.clear()
+        if nd > 1:
+            n = data.shape[1]
+        else:
+            data = (np.asmatrix(data)).getT()
+            n = 1
+        num_traj = int(data.shape[0] / self.params['len_time'])
+
+        new_len_time = self.params['len_time'] - self.params['num_shifts']
+
+        data_tensor = np.zeros([self.params['num_shifts'] + 1, num_traj * new_len_time, n])
+
+        for j in np.arange(self.params['num_shifts'] + 1):
+            for count in np.arange(num_traj):
+                data_tensor_range = np.arange(count * new_len_time, new_len_time + count * new_len_time)
+                data_tensor[j, data_tensor_range, :] = data[count * self.params['len_time'] + j: count * self.params['len_time'] + j + new_len_time,
+                                                       :]
+        print('finish set test set')
+        return data_tensor
+
 
     def SetTrainingSet(self):
         num_shifts = helper_torch.num_shifts_in_stack(self.params)

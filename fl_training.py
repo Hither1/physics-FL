@@ -23,7 +23,7 @@ import random as r
 params = {}
 
 # settings related to dataset
-params['data_name'] = 'SIR'
+params['data_name'] = 'Pendulum' #'SIR'
 params['len_time'] = 257
 n = 2  # dimension of system (and input layer)
 num_initial_conditions = 5000  # per training file
@@ -200,8 +200,7 @@ if __name__ == '__main__':
     test_model = net.koopman_net(params, device=device, task=task)
     try:
         print('Initializing global model contrainer......', end='')
-         #device=device, model=model, task=task
-        #test_model.SetTestingSet(f'./data/SIR_train_{task}/test.csv')
+        test_model.SetTestingSet()
         test_model.to('cpu')
         print('Done.')
     except:
