@@ -127,12 +127,32 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             offset = 0
 
         batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
-        network.Train(batch_data_train)
+        x, y, g_list = network(batch_data_train)
+        regularized_loss = network.regularized_loss(x, y, g_list)  # regularized_loss
+        regularized_loss1 = network.regularized_loss1(x, y, g_list)
+        before = network.model_params
+        if (not network.params['been5min']) and network.params['auto_first']:
+            network.optimizer_autoencoder.zero_grad()
+            #regularized_loss1.retain_grad()
+            regularized_loss1.backward()
+            #tc.set_printoptions(profile="full")
+            #print("grad", regularized_loss1.grad)
+            network.optimizer_autoencoder.step()
+
+        else:
+            network.optimizer.zero_grad()
+            regularized_loss.backward()
+            tc.set_printoptions(profile="full")
+            print("grad", regularized_loss.grad)
+            network.optimizer.step()
+        after = network.model_params
+        print('change in param', np.array(after) - np.array(before))
+        network.history_loss_train.append(float(regularized_loss))
 
         if step % 20 == 0:
-            x, y, g_list = network(data_train_tensor)
-            train_error = network.regularized_loss(data_train_tensor, y, g_list) # reg_train_err
+            train_error = network.regularized_loss(batch_data_train, y, g_list) # reg_train_err
             x, y, g_list = network(data_val_tensor)
+
             val_error = network.regularized_loss(data_val_tensor, y, g_list) # reg_val_err
             if val_error < (best_error - best_error * (10 ** (-5))):
                 best_error = val_error #.copy()

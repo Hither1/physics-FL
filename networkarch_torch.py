@@ -313,7 +313,6 @@ class koopman_net(nn.Module):
                 tc.mean(tc.square(tc.squeeze(x[0, :, :])), 1)) + denominator_nonzero
         else:
             loss1_denominator = tc.tensor(1.0)  # .double
-
         mean_squared_error = tc.mean(tc.mean(tc.square(y[0] - tc.squeeze(tc.tensor(x[0, :, :]))), 1))
         loss1 = self.params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
 
@@ -449,7 +448,6 @@ class koopman_net(nn.Module):
         for j in tc.arange(num_real):
             ind = 2 * num_complex_pairs + j
             temp = y[:, ind]
-            # print("real", tf.exp(omegas[num_complex_pairs + j] * delta_t).eval(session=tf.compat.v1.Session()))
             real_list.append(tc.mul(tc.unsqueeze(temp[:], 0), tc.exp(omegas[num_complex_pairs + j] * delta_t)))
 
         if len(real_list):
@@ -491,32 +489,9 @@ class koopman_net(nn.Module):
             print("messed up looping over shifts! %r" % self.params['shifts'])
             raise ValueError(
                 'length(y) not proper length: check create_koopman_net code and how defined params[shifts] in experiment')
-
         return x, y, g_list
 
-    def Train(self, input):
-        x, y, g_list = self.forward(input)
-        regularized_loss = self.regularized_loss(x, y, g_list)  # regularized_loss
-        regularized_loss1 = self.regularized_loss1(x, y, g_list)
 
-        before = self.model_params
-        if (not self.params['been5min']) and self.params['auto_first']:
-            self.optimizer_autoencoder.zero_grad()
-            regularized_loss1.retain_grad()
-            regularized_loss1.backward()
-            tc.set_printoptions(profile="full")
-            print("grad", regularized_loss1.grad)
-            self.optimizer_autoencoder.step()
-
-        else:
-            self.optimizer.zero_grad()
-            regularized_loss.backward()
-            tc.set_printoptions(profile="full")
-            print("grad", regularized_loss.grad)
-            self.optimizer.step()
-        after = self.model_params
-        print('change in param', np.array(after) - np.array(before))
-        self.history_loss_train.append(float(regularized_loss))
 
     def SetTestingSet(self):
         data = pd.read_csv('./data/%s/%s_val_x.csv' % (self.params['data_name'], self.params['data_name']), header=None)
