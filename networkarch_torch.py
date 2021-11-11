@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import torch as tc
 import torch.nn as nn
@@ -14,21 +15,21 @@ def weight_initialize(shape, layer, dist='tn', scale=0.1):
         var_name -- string naming weight variable
         distribution -- string for which distribution to use for random initialization (default 'tn')
         scale -- (for tn distribution): standard deviation of normal distribution before truncation (default 0.1)
-    Raises ValueError if distribution is filename but shape of data in file does not match input shape
+    Raises ValueError if distribution is filename but shape of data in
     """
     if dist == 'tn':
         nn.init.trunc_normal_(layer.weight, std=scale)
     elif dist == 'xavier':
-        scale = 4 * np.sqrt(6.0 / (shape[0] + shape[1]))
+        scale = 4 * tc.sqrt(6.0 / (tc.tensor(shape[0]) + tc.tensor(shape[1])))
         nn.init.uniform_(layer.weight, a=-scale, b=scale)
     elif dist == 'dl':
-        scale = 1.0 / np.sqrt(shape[0])
+        scale = 1.0 / tc.sqrt(tc.tensor(shape[0]))
         nn.init.uniform_(layer.weight, a=-scale, b=scale)
     elif dist == 'he':
-        scale = np.sqrt(2.0 / shape[0])
+        scale = tc.sqrt(2.0 / tc.tensor(shape[0]))
         nn.init.normal(layer.weight, mean=0, std=scale)
     elif dist == 'glorot_bengio':
-        scale = np.sqrt(6.0 / (shape[0] + shape[1]))
+        scale = tc.sqrt(6.0 / (tc.tensor(shape[0]) + tc.tensor(shape[1])))
         nn.init.uniform_(layer.weight, a=-scale, b=scale)
     else:
         '''initial = np.loadtxt(dist, delimiter=',', dtype=np.float64)
@@ -48,7 +49,7 @@ def bias_initialize(shape, layer, distribution=''):
         distribution -- string for which distribution to use for random initialization (file name) (default '')
     """
     # if distribution:
-    #   initial = np.genfromtxt(distribution, delimiter=',', dtype=np.float64)
+    #
     #   nn.init.constant_(layer.bias, 0.0)
     # else:
     nn.init.constant_(layer.bias, 0.0)
@@ -71,7 +72,7 @@ class omega_net(nn.Module):
         self.device = device
 
         self.omega_parameters, self.omega_nets_complex, self.omega_nets_real = [], [], []
-        for j in np.arange(params['num_complex_pairs']):
+        for j in tc.arange(params['num_complex_pairs']):
             if params['act_type'] == "sigmoid":
                 omega_net = nn.Sequential(decoder(
                     params['widths_omega_complex'], params['scale_omega'], device=self.device),
@@ -85,7 +86,7 @@ class omega_net(nn.Module):
                     params['widths_omega_complex'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ELU(True))
             self.omega_parameters += list(omega_net.parameters())
             self.omega_nets_complex.append(omega_net)
-        for j in np.arange(params['num_real']):
+        for j in tc.arange(params['num_real']):
             if self.params['act_type'] == "sigmoid":
                 omega_net = nn.Sequential(decoder(
                     params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.Sigmoid(True))
@@ -113,21 +114,21 @@ class omega_net(nn.Module):
                 params -- dictionary of parameters for experiment
                 ycoords -- array of shape [None, k] of y-coordinates, where L will be k x k
             Returns:
-                omegas -- list, output of omega (auxiliary) network(s) applied to input ycoords
+                omegas -- list, output of omega (auxiliary) network(s) applied to  ycoords
             """
         omegas = []
-        for j in np.arange(self.params['num_complex_pairs']):
+        for j in tc.arange(self.params['num_complex_pairs']):
             ind = 2 * j
             pair_of_columns = ycoords[:, ind:ind + 2]
             radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
             omegas.append(
-                self.omega_nets_complex[j](tc.tensor(radius_of_pair, device=self.device)))
+                self.omega_nets_complex[j](radius_of_pair.to(self.device)))
 
-        for j in np.arange(self.params['num_real']):
+        for j in tc.arange(self.params['num_real']):
             ind = 2 * self.params['num_complex_pairs'] + j
-            one_column = ycoords[:, ind]
+            one_column = tc.tensor(ycoords[:, ind])
             omegas.append(
-                self.omega_nets_real[j](tc.tensor(one_column[:, np.newaxis],device=self.device)))
+                self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0).to(self.device)))
 
         return omegas
 
@@ -145,7 +146,7 @@ class encoder(nn.Module):
                             num_shifts_max -- number of shifts (time steps) that losses will use (max of num_shifts and num_shifts_middle)
                         """
         encoder_layers = []
-        for i in np.arange(len(encoder_widths) - 1):
+        for i in tc.arange(len(encoder_widths) - 1):
             fc_layer = nn.Linear(encoder_widths[i], encoder_widths[i + 1])
             fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, dist_weights[i], scale)
             # fc_layer = bias_initialize(fc_layer)
@@ -170,7 +171,7 @@ class encoder(nn.Module):
                 """
         y = []
         num_shifts_middle = len(self.shifts_middle)
-        for j in np.arange(num_shifts_middle + 1):
+        for j in tc.arange(num_shifts_middle + 1):
             if j == 0:
                 shift = 0
             else:
@@ -189,7 +190,7 @@ class decoder(nn.Module):
     def __init__(self, decoder_widths, scale, act_type, device):
         super().__init__()
         layers = []
-        for i in np.arange(len(decoder_widths) - 1):
+        for i in tc.arange(len(decoder_widths) - 1):
             ind = i + 1
             fc_layer = nn.Linear(decoder_widths[i], decoder_widths[i + 1])
             fc_layer = weight_initialize([decoder_widths[i], decoder_widths[i + 1]], fc_layer, scale)
@@ -251,9 +252,9 @@ class koopman_net(nn.Module):
         self.loss = self.physics_informed_loss
 
         if params['opt_alg'] == 'adam':
-            self.optimizer, self.optimizer_autoencoder = tc.optim.Adam(self.parameters(True),
+            self.optimizer, self.optimizer_autoencoder = tc.optim.Adam(self.model_params,
                                                                        lr=params['learning_rate']), tc.optim.Adam(
-                self.parameters(), lr=params['learning_rate'])
+                self.model_params, lr=params['learning_rate'])
         elif params['opt_alg'] == 'adadelta':
             if params['decay_rate'] > 0:
                 self.optimizer = tc.optim.Adadelta(params['learning_rate'], params['decay_rate'])
@@ -276,11 +277,10 @@ class koopman_net(nn.Module):
         # initial_accumulator_value, reg.
         # optimizer = tf.train.ProximalAdagradOptimizer(params['learning_rate'])
         elif params['opt_alg'] == 'RMS':
-            # momentum, epsilon, centered (False/True)
             if params['decay_rate'] > 0:
-                self.optimizer = tc.optim.RMSprop(lr=params['learning_rate'], weight_decay=params[
-                    'decay_rate'])  # tf.train.RMSPropOptimizer(params['learning_rate'], params['decay_rate'])
-                self.optimizer_autoencoder = tc.optim.RMSprop(lr=params['learning_rate'], weight_decay=params[
+                self.optimizer = tc.optim.RMSprop(self.model_params, lr=params['learning_rate'], weight_decay=params[
+                    'decay_rate'])
+                self.optimizer_autoencoder = tc.optim.RMSprop(self.model_params, lr=params['learning_rate'], weight_decay=params[
                     'decay_rate'])
             else:  # default decay_rate 0.9
                 self.optimizer = tc.optim.RMSprop(self.parameters(), lr=params['learning_rate'])
@@ -299,84 +299,83 @@ class koopman_net(nn.Module):
         self.history_acc_benign = []
         self.history_acc_poisoned = []
 
-    def physics_informed_loss(self, params, x, y, g_list):
+    def physics_informed_loss(self, x, y, g_list):
         denominator_nonzero = 10 ** (-5)
-
         # loss1 -- autoencoder loss
-        if params['relative_loss']:
+        if self.params['relative_loss']:
             loss1_denominator = tc.reduce_mean(
                 tc.mean(tc.square(tc.squeeze(x[0, :, :])), 1)) + denominator_nonzero
         else:
             loss1_denominator = tc.tensor(1.0)  # .double
 
         mean_squared_error = tc.mean(tc.mean(tc.square(y[0] - tc.squeeze(tc.tensor(x[0, :, :]))), 1))
-        loss1 = params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
+        loss1 = self.params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
 
         # gets dynamics/prediction loss
         loss2 = tc.tensor([1, ], dtype=tc.float64)
-        if params['num_shifts'] > 0:
-            for j in np.arange(params['num_shifts']):
+        if self.params['num_shifts'] > 0:
+            for j in tc.arange(self.params['num_shifts']):
                 # xk+1, xk+2, xk+3
-                shift = params['shifts'][j]
-                if params['relative_loss']:
+                shift = self.params['shifts'][j]
+                if self.params['relative_loss']:
                     loss2_denominator = tc.mean(
                         tc.mean(tc.square(tc.squeeze(x[shift, :, :])), 1)) + denominator_nonzero
                 else:
                     loss2_denominator = tc.tensor(1.0)  # .double
-                loss2 = loss2 + params['recon_lam'] * tc.true_divide(
+                loss2 = loss2 + self.params['recon_lam'] * tc.true_divide(
                     tc.mean(tc.mean(tc.square(y[j + 1] - tc.squeeze(tc.tensor(x[shift, :, :]))), 1)),
                     loss2_denominator)
-            loss2 = loss2 / params['num_shifts']
+            loss2 = loss2 / self.params['num_shifts']
 
         # K linear loss
         loss3 = tc.tensor([1, ], dtype=tc.float64)
         count_shifts_middle = 0
-        if params['num_shifts_middle'] > 0:
+        if self.params['num_shifts_middle'] > 0:
             # generalization of: next_step = tf.matmul(g_list[0], L_pow)
             omegas = self.omega(g_list[0])
-            for param in params:
-                next_step = self.varying_multiply(g_list[0], omegas, params['delta_t'], params['num_real'],
-                                                  params['num_complex_pairs'])
+            for param in self.params:
+                next_step = self.varying_multiply(g_list[0], omegas, self.params['delta_t'], self.params['num_real'],
+                                                  self.params['num_complex_pairs'])
 
             # multiply g_list[0] by L (j+1) times
-            for j in np.arange(max(params['shifts_middle'])):
-                if (j + 1) in params['shifts_middle']:
-                    if params['relative_loss']:
+            for j in tc.arange(max(self.params['shifts_middle'])):
+                if (j + 1) in self.params['shifts_middle']:
+                    if self.params['relative_loss']:
                         loss3_denominator = tc.mean(
                             tc.mean(tc.square(tc.squeeze(g_list[count_shifts_middle + 1])),
                                     1)) + denominator_nonzero
                     else:
                         loss3_denominator = tc.tensor(1.0)  # .double
-                    loss3 = loss3 + params['mid_shift_lam'] * tc.true_divide(
+                    loss3 = loss3 + self.params['mid_shift_lam'] * tc.true_divide(
                         tc.mean(tc.mean(tc.square(next_step - g_list[count_shifts_middle + 1]), 1)),
                         loss3_denominator)
                     count_shifts_middle += 1
                 omegas = self.omega(next_step)
-                next_step = self.varying_multiply(next_step, omegas, params['delta_t'], params['num_real'],
-                                                  params['num_complex_pairs'])
+                next_step = self.varying_multiply(next_step, omegas, self.params['delta_t'], self.params['num_real'],
+                                                  self.params['num_complex_pairs'])
 
-            loss3 = loss3 / params['num_shifts_middle']
+            loss3 = loss3 / self.params['num_shifts_middle']
 
         # inf norm on autoencoder error and one prediction step
-        if params['relative_loss']:
-            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=np.inf, dim=1),
-                                ord=np.inf) + denominator_nonzero
-            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=np.inf, dim=1),
-                                ord=np.inf) + denominator_nonzero
+        if self.params['relative_loss']:
+            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1),
+                                ord=tc.inf) + denominator_nonzero
+            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1),
+                                ord=tc.inf) + denominator_nonzero
         else:
             Linf1_den = tc.tensor(1.0)  # .double
             Linf2_den = tc.tensor(1.0)
 
         Linf1_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[0] - tc.squeeze(tc.tensor(x[0, :, :])), p=np.inf, dim=1), p=np.inf), Linf1_den)
+            tc.norm(tc.norm(y[0] - tc.squeeze(tc.tensor(x[0, :, :])), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
         Linf2_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[1] - tc.squeeze(tc.tensor(x[1, :, :])), p=np.inf, dim=1), p=np.inf), Linf2_den)
-        loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
+            tc.norm(tc.norm(y[1] - tc.squeeze(tc.tensor(x[1, :, :])), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
+        loss_Linf = self.params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
 
         loss = loss1 + loss2 + loss3 + loss_Linf
         # ==== Define the regularization and add to loss. ====
         #         regularized_loss1 -- loss1 (autoencoder loss) + regularization
-        if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
+        if self.params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
             l1_regularizer = tc.nn.L1Loss(
                 size_average=False)
             loss_L1 = tc.norm(self.model_params, 1)
@@ -385,11 +384,11 @@ class koopman_net(nn.Module):
 
         l2_regularizer = sum(
             [tc.norm(tc.tensor(t), 2) for t in self.model_params])  # loss_L2 -- L2 regularization on weights W
-        loss_L2 = params['L2_lam'] * l2_regularizer
+        loss_L2 = self.params['L2_lam'] * l2_regularizer
 
         regularized_loss = loss + loss_L1 + loss_L2
         regularized_loss1 = loss1 + loss_L1 + loss_L2
-        return tc.tensor(loss, device=self.device),tc.tensor(regularized_loss, device=self.device)  # regularized_loss -- loss + regularization
+        return regularized_loss, regularized_loss1#, loss  # regularized_loss -- loss + regularization
 
     def form_complex_conjugate_block(self, omegas, delta_t):
         """Form a 2x2 block for a complex conj. pair of eigenvalues, but for each example, so dimension [None, 2, 2]
@@ -417,13 +416,11 @@ class koopman_net(nn.Module):
             delta_t -- time step in trajectories from input data
             num_real -- number of real eigenvalues
             num_complex_pairs -- number of pairs of complex conjugate eigenvalues
-        Returns:
-            array same size as input y, but advanced to next time step
         """
         complex_list = []
 
         # first, Jordan blocks for each pair of complex conjugate eigenvalues
-        for j in np.arange(num_complex_pairs):
+        for j in tc.arange(num_complex_pairs):
             ind = 2 * j
             ystack = tc.stack([y[:, ind:ind + 2], y[:, ind:ind + 2]], axis=2)
             L_stack = self.form_complex_conjugate_block(omegas[j], delta_t)
@@ -437,11 +434,11 @@ class koopman_net(nn.Module):
         # next, diagonal structure for each real eigenvalue
         # faster to not explicitly create stack of diagonal matrices L
         real_list = []
-        for j in np.arange(num_real):
+        for j in tc.arange(num_real):
             ind = 2 * num_complex_pairs + j
             temp = y[:, ind]
             # print("real", tf.exp(omegas[num_complex_pairs + j] * delta_t).eval(session=tf.compat.v1.Session()))
-            real_list.append(tc.mul(temp[:, np.newaxis], tc.exp(omegas[num_complex_pairs + j] * delta_t)))
+            real_list.append(tc.mul(tc.unsqueeze(temp[:], 0), tc.exp(omegas[num_complex_pairs + j] * delta_t)))
 
         if len(real_list):
             real_part = tc.cat(real_list, axis=1)
@@ -456,7 +453,7 @@ class koopman_net(nn.Module):
         g_list = self.encoder(x)
 
         encoded_layer = g_list[0]
-        omegas = self.omega(tc.tensor(g_list[0], device=self.device))
+        omegas = self.omega(g_list[0])
 
         y = []  # y[0] is x[0,:,:] encoded and then decoded (no stepping forward)
         y.append(self.decoder(encoded_layer))
@@ -464,9 +461,10 @@ class koopman_net(nn.Module):
         advanced_layer = self.varying_multiply(encoded_layer, omegas, self.params['delta_t'], self.params['num_real'],
                                                self.params['num_complex_pairs'])
 
-        for j in np.arange(max(self.params['shifts'])):
+        for j in tc.arange(max(self.params['shifts'])):
+
             # considering penalty on subset of yk+1, yk+2, yk+3, ...
-            if (j + 1) in self.params['shifts']:
+            if (j + 1) in tc.tensor(self.params['shifts']):
                 y.append(
                     self.decoder(advanced_layer))
 
@@ -477,33 +475,35 @@ class koopman_net(nn.Module):
 
         # x = x.view(-1, 256)
         if len(y) != (len(self.params['shifts']) + 1):
+            print(len(y[0]), len(self.params['shifts']) + 1)
             print("messed up looping over shifts! %r" % self.params['shifts'])
             raise ValueError(
                 'length(y) not proper length: check create_koopman_net code and how defined params[shifts] in experiment')
 
         return x, y, g_list
 
-    def Train(self):
-        if self.sampleset_training == []:
-            print("Please set training set before training.")
-            return
-        for sample_batch in self.sampleset_training:
-            x, y, g_list = self.forward(sample_batch)
-            loss, regularized_loss = self.loss(self.params, x, y, g_list)
-            loss = Variable(loss, requires_grad = True)
-            if (not self.params['been5min']) and self.params['auto_first']:
-                self.optimizer_autoencoder.zero_grad()
-                loss.backward()
-                self.optimizer_autoencoder.step()
-            else:
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+    def Train(self, input):
+        x, y, g_list = self.forward(input)
+        regularized_loss, regularized_loss1 = self.loss(input, y, g_list) # regularized_loss
 
-        self.history_loss_train.append(float(loss))
+        before = self.model_params
+        if (not self.params['been5min']) and self.params['auto_first']:
+            self.optimizer_autoencoder.zero_grad()
+            regularized_loss1.backward()
+            self.optimizer_autoencoder.step()
+
+        else:
+            self.optimizer.zero_grad()
+            regularized_loss.backward()
+            print("grad", regularized_loss1.grad)
+            self.optimizer.step()
+        after = self.model_params
+        print('change in param', np.array(after) - np.array(before))
+        self.history_loss_train.append(float(regularized_loss))
 
     def SetTestingSet(self):
-        data = np.loadtxt(('./data/%s/%s_val_x.csv' % (self.params['data_name'], self.params['data_name'])), delimiter=',', dtype=np.float64)
+        data = pd.read_csv('./data/%s/%s_val_x.csv' % (self.params['data_name'], self.params['data_name']), header=None)
+        data = tc.tensor(data.values)
         nd = data.ndim
         max_shifts_to_stack = 1
         if self.params['num_shifts']:
@@ -514,49 +514,46 @@ class koopman_net(nn.Module):
         if nd > 1:
             n = data.shape[1]
         else:
-            data = (np.asmatrix(data)).getT()
+            data = tc.transpose(data)
             n = 1
         num_traj = int(data.shape[0] / self.params['len_time'])
 
         new_len_time = self.params['len_time'] - max_shifts_to_stack
 
-        data_tensor = np.zeros([max_shifts_to_stack + 1, num_traj * new_len_time, n])
+        data_tensor = tc.zeros([max_shifts_to_stack + 1, num_traj * new_len_time, n], dtype=tc.float64)
 
-        for j in np.arange(max_shifts_to_stack + 1):
-            for count in np.arange(num_traj):
-                data_tensor_range = np.arange(count * new_len_time, new_len_time + count * new_len_time)
+        for j in tc.arange(max_shifts_to_stack + 1):
+            for count in tc.arange(num_traj):
+                data_tensor_range = tc.tensor(tc.arange(count * new_len_time, new_len_time + count * new_len_time))
                 data_tensor[j, data_tensor_range, :] = data[count * self.params['len_time'] + j: count * self.params['len_time'] + j + new_len_time,
                                                        :]
-        return tc.tensor(data_tensor, device=self.device)
+        return data_tensor.to(self.device)
 
 
-    def SetTrainingSet(self):
+    def SetTrainingSet(self, file_num):
         num_shifts = helper_torch.num_shifts_in_stack(self.params)
-        for f in range(self.params['data_train_len'] * self.params['num_passes_per_file']):
-            file_num = (f % self.params['data_train_len']) + 1
+        data = pd.read_csv(('./data/%s/%s_train%d_x.csv' % (self.task, self.task, file_num)))
+        data = tc.tensor(data.values)
 
-            data = np.loadtxt(('./data/%s/%s_train%d_x.csv' % (self.task, self.task, file_num)), delimiter=',',
-                              dtype=np.float64)
+        nd = data.ndim
+        if nd > 1:
+            n = data.shape[1]
+        else:
+            data = tc.transpose(data)
+            n = 1
+        num_traj = int(data.shape[0] / self.params['len_time'])
 
-            nd = data.ndim
-            if nd > 1:
-                n = data.shape[1]
-            else:
-                data = (np.asmatrix(data)).getT()
-                n = 1
-            num_traj = int(data.shape[0] / self.params['len_time'])
+        new_len_time = self.params['len_time'] - num_shifts
 
-            new_len_time = self.params['len_time'] - num_shifts
+        data_tensor = tc.zeros([num_shifts + 1, num_traj * new_len_time, n], dtype=tc.float64)
 
-            data_tensor = np.zeros([num_shifts + 1, num_traj * new_len_time, n])
-
-            for j in np.arange(num_shifts + 1):
-                for count in np.arange(num_traj):
-                    data_tensor_range = np.arange(count * new_len_time, new_len_time + count * new_len_time)
-                    data_tensor[j, data_tensor_range, :] = data[
+        for j in tc.arange(num_shifts + 1):
+            for count in tc.arange(num_traj):
+                data_tensor_range = tc.arange(count * new_len_time, new_len_time + count * new_len_time)
+                data_tensor[j, data_tensor_range, :] = data[
                                                            count * self.params['len_time'] + j: count * self.params[
                                                                'len_time'] + j + new_len_time,
                                                            :]
 
-        self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
-        return tc.tensor(data_tensor, device=self.device)
+        #self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
+        return data_tensor.to(self.device)

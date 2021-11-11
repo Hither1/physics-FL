@@ -14,8 +14,8 @@ aggregation_rule = 'FedAvg'
 #aggregation_rule = 'FedInv'
 
 # model's device
-device = 'cuda'
-#device = 'cpu'
+#device = 'cuda'
+device = 'cpu'
 
 # model's type
 model='cnn'

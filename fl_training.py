@@ -24,7 +24,7 @@ params = {}
 
 # settings related to dataset
 params['data_name'] = 'Pendulum' #'SIR'
-params['len_time'] = 257
+params['len_time'] = 51
 n = 2  # dimension of system (and input layer)
 num_initial_conditions = 5000  # per training file
 params['delta_t'] = 0.02
@@ -52,7 +52,7 @@ params['L1_lam'] = 0.0
 params['auto_first'] = 1
 
 # settings related to training
-params['num_passes_per_file'] = 15 * 6 #* 50
+params['num_passes_per_file'] = 15 * 6 * 50
 params['num_steps_per_batch'] = 2
 params['learning_rate'] = 10 ** (-3)
 
@@ -73,8 +73,8 @@ params['num_LSTM_hidden_weights'] = 1
 params['LSTM_widths'] = [50]
 
 
-params['data_train_len'] = 2 #r.randint(3, 6)
-params['batch_size'] = int(2 ** 2)#(r.randint(7, 9)))
+params['data_train_len'] = r.randint(3, 6)
+params['batch_size'] = int(2 ** (r.randint(7, 9)))
 steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
@@ -100,9 +100,58 @@ elif do == 2:
     wo = wopts[r.randint(0, len(wopts) - 1)]
     params['hidden_widths_omega'] = [wo, wo]
 
+# Training
+helper_torch.set_defaults(params)
+network = net.koopman_net(params, device=device, task=task)
+#network.load_state_dict(init_model)
+data_val_tensor = network.SetTestingSet()
+best_error = 10000
+error_records = []
+finished = 0
+for f in range(params['data_train_len'] * params['num_passes_per_file']):
+    if finished:
+        break
+    file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
+    if (params['data_train_len'] > 1) or (f == 0):
+        data_train_tensor = network.SetTrainingSet(file_num)
+        num_examples = data_train_tensor.shape[1]
+        num_batches = int(np.floor(num_examples / params['batch_size']))
+
+    ind = np.arange(num_examples)
+    np.random.shuffle(ind)
+    data_train_tensor = data_train_tensor[:, ind, :]
+    for step in range(params['num_steps_per_batch'] * num_batches):
+        if params['batch_size'] < data_train_tensor.shape[1]:
+            offset = (step * params['batch_size']) % (num_examples - params['batch_size'])
+        else:
+            offset = 0
+
+        batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
+        network.Train(batch_data_train)
+
+        if step % 20 == 0:
+            x, y, g_list = network(data_train_tensor)
+            train_error, train_error1 = network.physics_informed_loss(data_train_tensor, y, g_list) # reg_train_err
+            x, y, g_list = network(data_val_tensor)
+            val_error, val_error1 = network.physics_informed_loss(data_val_tensor, y, g_list) # reg_val_err
+            if val_error < (best_error - best_error * (10 ** (-5))):
+                best_error = val_error #.copy()
+                print("New best val error %f %f" % (
+                    train_error, train_error1))#, reg_train_err, reg_val_err)) (with reg. train err %f and reg. val err %f)
+            error_records.append([best_error])#, reg_train_err, reg_val_err])
+        if step > params['num_steps_per_file_pass']:
+            params['stop_condition'] = 'reached num_steps_per_file_pass'
+            break
+
+    if device == 'cuda':
+        tp = copy.deepcopy(network)
+        tp.to('cpu')
+        #elif device == 'cpu':
+
+pd.Dataframe(error_records).to_csv('./tc_errors.csv')
 
 # =================== FL methods (EDITABLE) ====================
-def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, params):
+"""def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, params):
     print(params['widths'])
     network = net.koopman_net(params, device=device, task=task)
     network.load_state_dict(init_model)
@@ -308,3 +357,4 @@ if __name__ == '__main__':
             pipe[1].send(global_model.copy())
     # =================== Server process ====================
     print(test_model.history_acc_benign)'''
+"""
