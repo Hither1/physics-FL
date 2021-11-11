@@ -52,7 +52,7 @@ params['L1_lam'] = 0.0
 params['auto_first'] = 1
 
 # settings related to training
-params['num_passes_per_file'] = 15 * 6 * 50
+params['num_passes_per_file'] = 15 * 6 #* 50
 params['num_steps_per_batch'] = 2
 params['learning_rate'] = 10 ** (-3)
 

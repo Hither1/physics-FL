@@ -488,7 +488,7 @@ class koopman_net(nn.Module):
             return
         for sample_batch in self.sampleset_training:
             x, y, g_list = self.forward(sample_batch)
-            loss, regularized_loss = self.physics_informed_loss(self.params, x, y, g_list)
+            loss, regularized_loss = self.loss(self.params, x, y, g_list)
             if (not self.params['been5min']) and self.params['auto_first']:
                 self.optimizer_autoencoder.zero_grad()
                 loss.backward()
