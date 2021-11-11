@@ -32,6 +32,7 @@ def weight_initialize(shape, layer, dist='tn', scale=0.1):
         scale = tc.sqrt(6.0 / (tc.tensor(shape[0]) + tc.tensor(shape[1])))
         nn.init.uniform_(layer.weight, a=-scale, b=scale)
     else:
+        print("NO initial weight")
         '''initial = np.loadtxt(dist, delimiter=',', dtype=np.float64)
         if (initial.shape[0] != shape[0]) or (initial.shape[1] != shape[1]):
             raise ValueError(
@@ -259,7 +260,7 @@ class koopman_net(nn.Module):
         if params['opt_alg'] == 'adam':
             self.optimizer, self.optimizer_autoencoder = tc.optim.Adam(self.model_params,
                                                                        lr=params['learning_rate']), tc.optim.Adam(
-                self.model_params, lr=params['learning_rate'])
+                                                                        self.model_params, lr=params['learning_rate'])
         elif params['opt_alg'] == 'adadelta':
             if params['decay_rate'] > 0:
                 self.optimizer = tc.optim.Adadelta(params['learning_rate'], params['decay_rate'])
@@ -394,7 +395,7 @@ class koopman_net(nn.Module):
         # , loss  # regularized_loss -- loss + regularization
 
     def regularized_loss(self, x, y, g_list):
-        loss, loss1, loss_L1, loss_L2 = self.loss(x, y, g_list)
+        loss, loss1, loss_L1, loss_L2 = self.loss(x, y, g_list) ##physical loss
         return loss + loss_L1 + loss_L2
 
     def regularized_loss1(self, x, y, g_list):
