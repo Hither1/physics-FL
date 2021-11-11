@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 import torch.distributed as dist
-
+import pandas as pd
 import helper_torch
 import networkarch_torch as net
 import torch.multiprocessing as processing
@@ -109,6 +109,7 @@ def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, 
     pipe_download.recv()
     data_val_tensor = network.SetTestingSet()
     best_error = 10000
+    error_records = []
     for f in range(params['data_train_len'] * params['num_passes_per_file']):
         #if finished:
            # break
@@ -140,8 +141,7 @@ def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, 
                     best_error = val_error #.copy()
                     print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
                         best_error, reg_train_err, reg_val_err))
-
-
+                    error_records.append([best_error, reg_train_err, reg_val_err])
             if step > params['num_steps_per_file_pass']:
                 params['stop_condition'] = 'reached num_steps_per_file_pass'
                 break
@@ -156,6 +156,7 @@ def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, 
         '''global_model = pipe_download.recv()
         network.load_state_dict(global_model)'''
     pass
+    pd.Dataframe(error_records).to_csv('./tc_errors.csv')
 
 
 def Aggregation():
