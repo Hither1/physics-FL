@@ -1,6 +1,7 @@
 import numpy as np
 import torch as tc
 import torch.nn as nn
+from torch.autograd import Variable
 import math
 import helper_torch
 import csv as csv
@@ -388,7 +389,7 @@ class koopman_net(nn.Module):
 
         regularized_loss = loss + loss_L1 + loss_L2
         regularized_loss1 = loss1 + loss_L1 + loss_L2
-        return loss, regularized_loss  # regularized_loss -- loss + regularization
+        return tc.tensor(loss, device=self.device),tc.tensor(regularized_loss, device=self.device)  # regularized_loss -- loss + regularization
 
     def form_complex_conjugate_block(self, omegas, delta_t):
         """Form a 2x2 block for a complex conj. pair of eigenvalues, but for each example, so dimension [None, 2, 2]
@@ -489,6 +490,7 @@ class koopman_net(nn.Module):
         for sample_batch in self.sampleset_training:
             x, y, g_list = self.forward(sample_batch)
             loss, regularized_loss = self.loss(self.params, x, y, g_list)
+            loss = Variable(loss, requires_grad = True)
             if (not self.params['been5min']) and self.params['auto_first']:
                 self.optimizer_autoencoder.zero_grad()
                 loss.backward()
@@ -525,7 +527,7 @@ class koopman_net(nn.Module):
                 data_tensor_range = np.arange(count * new_len_time, new_len_time + count * new_len_time)
                 data_tensor[j, data_tensor_range, :] = data[count * self.params['len_time'] + j: count * self.params['len_time'] + j + new_len_time,
                                                        :]
-        return data_tensor
+        return tc.tensor(data_tensor, device=self.device)
 
 
     def SetTrainingSet(self):
@@ -557,4 +559,4 @@ class koopman_net(nn.Module):
                                                            :]
 
         self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
-        return data_tensor
+        return tc.tensor(data_tensor, device=self.device)

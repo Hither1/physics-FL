@@ -237,7 +237,7 @@ if __name__ == '__main__':
     try:
         print('Initializing global model contrainer......', end='')
         test_model.SetTestingSet()
-        test_model.to('cpu')
+        test_model.to('cuda')
         print('Done.')
     except:
         print('\033[31mFailed\033[0m')
