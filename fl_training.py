@@ -54,7 +54,7 @@ params['auto_first'] = 1
 # settings related to training
 params['num_passes_per_file'] = 15 * 6 * 50
 params['num_steps_per_batch'] = 2
-params['learning_rate'] = 10 ** (-3)
+params['learning_rate'] = 10 ** (-1) # -3
 
 # settings related to timing
 params['max_time'] = 6 * 60 * 60  # 6 hours
@@ -131,13 +131,13 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
 
         if step % 20 == 0:
             x, y, g_list = network(data_train_tensor)
-            train_error, train_error1 = network.physics_informed_loss(data_train_tensor, y, g_list) # reg_train_err
+            train_error = network.regularized_loss(data_train_tensor, y, g_list) # reg_train_err
             x, y, g_list = network(data_val_tensor)
-            val_error, val_error1 = network.physics_informed_loss(data_val_tensor, y, g_list) # reg_val_err
+            val_error = network.regularized_loss(data_val_tensor, y, g_list) # reg_val_err
             if val_error < (best_error - best_error * (10 ** (-5))):
                 best_error = val_error #.copy()
                 print("New best val error %f %f" % (
-                    train_error, train_error1))#, reg_train_err, reg_val_err)) (with reg. train err %f and reg. val err %f)
+                    train_error, val_error))#, reg_train_err, reg_val_err)) (with reg. train err %f and reg. val err %f)
             error_records.append([best_error])#, reg_train_err, reg_val_err])
         if step > params['num_steps_per_file_pass']:
             params['stop_condition'] = 'reached num_steps_per_file_pass'

@@ -79,23 +79,28 @@ class omega_net(nn.Module):
                     nn.Sigmoid())
             elif self.params['act_type'] == "relu":
                 omega_net = nn.Sequential(
-                    decoder(params['widths_omega_complex'], params['scale_omega'], self.params['act_type'], device=self.device),
+                    decoder(params['widths_omega_complex'], params['scale_omega'], self.params['act_type'],
+                            device=self.device),
                     nn.ReLU())
             elif self.params['act_type'] == "elu":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_complex'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ELU(True))
+                    params['widths_omega_complex'], params['scale_omega'], self.params['act_type'], device=self.device),
+                    nn.ELU(True))
             self.omega_parameters += list(omega_net.parameters())
             self.omega_nets_complex.append(omega_net)
         for j in tc.arange(params['num_real']):
             if self.params['act_type'] == "sigmoid":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.Sigmoid(True))
+                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device),
+                    nn.Sigmoid(True))
             elif self.params['act_type'] == "relu":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ReLU())
+                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device),
+                    nn.ReLU())
             elif self.params['act_type'] == "elu":
                 omega_net = nn.Sequential(decoder(
-                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device), nn.ELU(True))
+                    params['widths_omega_real'], params['scale_omega'], self.params['act_type'], device=self.device),
+                    nn.ELU(True))
             self.omega_parameters += list(omega_net.parameters())
             self.omega_nets_real.append(omega_net)
 
@@ -280,8 +285,9 @@ class koopman_net(nn.Module):
             if params['decay_rate'] > 0:
                 self.optimizer = tc.optim.RMSprop(self.model_params, lr=params['learning_rate'], weight_decay=params[
                     'decay_rate'])
-                self.optimizer_autoencoder = tc.optim.RMSprop(self.model_params, lr=params['learning_rate'], weight_decay=params[
-                    'decay_rate'])
+                self.optimizer_autoencoder = tc.optim.RMSprop(self.model_params, lr=params['learning_rate'],
+                                                              weight_decay=params[
+                                                                  'decay_rate'])
             else:  # default decay_rate 0.9
                 self.optimizer = tc.optim.RMSprop(self.parameters(), lr=params['learning_rate'])
         else:
@@ -376,8 +382,6 @@ class koopman_net(nn.Module):
         # ==== Define the regularization and add to loss. ====
         #         regularized_loss1 -- loss1 (autoencoder loss) + regularization
         if self.params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
-            l1_regularizer = tc.nn.L1Loss(
-                size_average=False)
             loss_L1 = tc.norm(self.model_params, 1)
         else:
             loss_L1 = tc.tensor([1, ], dtype=tc.float64)
@@ -386,9 +390,17 @@ class koopman_net(nn.Module):
             [tc.norm(tc.tensor(t), 2) for t in self.model_params])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = self.params['L2_lam'] * l2_regularizer
 
-        regularized_loss = loss + loss_L1 + loss_L2
-        regularized_loss1 = loss1 + loss_L1 + loss_L2
-        return regularized_loss, regularized_loss1#, loss  # regularized_loss -- loss + regularization
+        return loss, loss1, loss_L1, loss_L2
+
+        # , loss  # regularized_loss -- loss + regularization
+
+    def regularized_loss(self, x, y, g_list):
+        loss, loss1, loss_L1, loss_L2 = self.loss(x, y, g_list)
+        return loss + loss_L1 + loss_L2
+
+    def regularized_loss1(self, x, y, g_list):
+        loss, loss1, loss_L1, loss_L2 = self.physics_informed_loss(x, y, g_list)
+        return loss1 + loss_L1 + loss_L2
 
     def form_complex_conjugate_block(self, omegas, delta_t):
         """Form a 2x2 block for a complex conj. pair of eigenvalues, but for each example, so dimension [None, 2, 2]
@@ -484,18 +496,23 @@ class koopman_net(nn.Module):
 
     def Train(self, input):
         x, y, g_list = self.forward(input)
-        regularized_loss, regularized_loss1 = self.loss(input, y, g_list) # regularized_loss
+        regularized_loss = self.regularized_loss(x, y, g_list)  # regularized_loss
+        regularized_loss1 = self.regularized_loss1(x, y, g_list)
 
         before = self.model_params
         if (not self.params['been5min']) and self.params['auto_first']:
             self.optimizer_autoencoder.zero_grad()
+            regularized_loss1.retain_grad()
             regularized_loss1.backward()
+            tc.set_printoptions(profile="full")
+            print("grad", regularized_loss1.grad)
             self.optimizer_autoencoder.step()
 
         else:
             self.optimizer.zero_grad()
             regularized_loss.backward()
-            print("grad", regularized_loss1.grad)
+            tc.set_printoptions(profile="full")
+            print("grad", regularized_loss.grad)
             self.optimizer.step()
         after = self.model_params
         print('change in param', np.array(after) - np.array(before))
@@ -525,10 +542,10 @@ class koopman_net(nn.Module):
         for j in tc.arange(max_shifts_to_stack + 1):
             for count in tc.arange(num_traj):
                 data_tensor_range = tc.tensor(tc.arange(count * new_len_time, new_len_time + count * new_len_time))
-                data_tensor[j, data_tensor_range, :] = data[count * self.params['len_time'] + j: count * self.params['len_time'] + j + new_len_time,
+                data_tensor[j, data_tensor_range, :] = data[count * self.params['len_time'] + j: count * self.params[
+                    'len_time'] + j + new_len_time,
                                                        :]
         return data_tensor.to(self.device)
-
 
     def SetTrainingSet(self, file_num):
         num_shifts = helper_torch.num_shifts_in_stack(self.params)
@@ -551,9 +568,9 @@ class koopman_net(nn.Module):
             for count in tc.arange(num_traj):
                 data_tensor_range = tc.arange(count * new_len_time, new_len_time + count * new_len_time)
                 data_tensor[j, data_tensor_range, :] = data[
-                                                           count * self.params['len_time'] + j: count * self.params[
-                                                               'len_time'] + j + new_len_time,
-                                                           :]
+                                                       count * self.params['len_time'] + j: count * self.params[
+                                                           'len_time'] + j + new_len_time,
+                                                       :]
 
-        #self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
+        # self.sampleset_training.append(tc.tensor(data_tensor, device=self.device))
         return data_tensor.to(self.device)
