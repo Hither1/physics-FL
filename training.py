@@ -213,7 +213,7 @@ def try_net(data_val, params):
                 offset = 0
 
             batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
-
+            print("batch_data_train", batch_data_train)
             feed_dict_train = {x: batch_data_train}
             feed_dict_train_loss = {x: batch_data_train}
             feed_dict_val = {x: data_val_tensor}
