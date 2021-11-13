@@ -394,7 +394,7 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
 
             val_error = loss_fn(params, network.model_params, data_val_tensor, y, g_list) # reg_val_err
             if val_error < (best_error - best_error * (10 ** (-5))):
-                best_error = val_error #.copy()
+                best_error = val_error#.copy()
                 print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
                     best_error, regularized_loss, val_error))# (with reg. train err %f and reg. val err %f)
             error_records.append([best_error, regularized_loss, val_error])#, reg_train_err, reg_val_err])
