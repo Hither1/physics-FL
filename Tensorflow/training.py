@@ -213,7 +213,6 @@ def try_net(data_val, params):
                 offset = 0
 
             batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
-            print("batch_data_train", batch_data_train)
             feed_dict_train = {x: batch_data_train}
             feed_dict_train_loss = {x: batch_data_train}
             feed_dict_val = {x: data_val_tensor}
@@ -271,7 +270,6 @@ def try_net(data_val, params):
 
     # SAVE RESULTS
     train_val_error = train_val_error[range(count), :]
-    print(train_val_error)
     params['time_exp'] = time.time() - start
     saver.restore(sess, params['model_path'])
     helperfns.save_files(sess, csv_path, train_val_error, params, weights, biases)

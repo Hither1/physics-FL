@@ -54,7 +54,7 @@ params['min_halfway'] = 1
 
 for count in range(200):  # loop to do random experiments
     params['data_train_len'] = r.randint(3, 6)
-    params['batch_size'] = int(2 ** (r.randint(7, 9)))
+    params['batch_size'] = 64#int(2 ** (r.randint(7, 9)))
     steps_to_see_all = num_examples / params['batch_size']
     params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
     params['L2_lam'] = 10 ** (-r.randint(13, 14))

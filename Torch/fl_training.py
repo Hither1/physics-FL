@@ -136,9 +136,12 @@ elif do == 2:
 # Training
 helper_torch.set_defaults(params)
 network = net.koopman_net(params, task=task)
+
 ## wheter use gpu
 use_cuda = tc.cuda.is_available()
 device = tc.device("cuda" if use_cuda else "cpu")
+network.to(device)
+
 if use_cuda:
 	tc.cuda.manual_seed(72)
 network.to(device)
