@@ -141,6 +141,7 @@ use_cuda = tc.cuda.is_available()
 device = tc.device("cuda" if use_cuda else "cpu")
 if use_cuda:
 	tc.cuda.manual_seed(72)
+network.to(device)
 #network.load_state_dict(init_model)
 if params['opt_alg'] == 'adam':
     optimizer, optimizer_autoencoder = tc.optim.Adam(network.parameters(),
@@ -178,17 +179,17 @@ elif params['opt_alg'] == 'RMS':
         optimizer = tc.optim.RMSprop(network.parameters(), lr=params['learning_rate'])
 else:
     raise ValueError("chose invalid opt_alg %s in params dict" % params['opt_alg'])
-data_val_tensor = _load_data(params, './data/%s/%s_val_x.csv' % (params['data_name'], params['data_name']))
+data_val_tensor = _load_data(params, './data/%s/%s_val_x.csv' % (params['data_name'], params['data_name'])).to(device)
 #============== End choose optimizer ===================
 
 #============== Begin choose loss ==================
 class _Loss(nn.Module):
-    reduction: str
+   # reduction: str
 
     def __init__(self, size_average=None, reduce=None, reduction: str = 'mean') -> None:
         super(_Loss, self).__init__()
         if size_average is not None or reduce is not None:
-            self.reduction: str = _Reduction.legacy_get_string(size_average, reduce)
+            self.reduction = _Reduction.legacy_get_string(size_average, reduce)
         else:
             self.reduction = reduction
 
@@ -349,7 +350,7 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
         break
     file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
     if (params['data_train_len'] > 1) or (f == 0):
-        data_train_tensor = _load_data(params, './data/%s/%s_train%d_x.csv' % (params['data_name'], params['data_name'], file_num))
+        data_train_tensor = _load_data(params, './data/%s/%s_train%d_x.csv' % (params['data_name'], params['data_name'], file_num)).to(device)
         num_examples = data_train_tensor.shape[1]
         num_batches = int(np.floor(num_examples / params['batch_size']))
 
