@@ -50,7 +50,7 @@ def _load_data(params, DATA_PATH):
             data_tensor[j, data_tensor_range, :] = data[count * params['len_time'] + j: count * params[
                 'len_time'] + j + new_len_time,
                                                    :]
-    return data_tensor#.to(device)
+    return data_tensor.to(device)
 
 
 params = {}
@@ -107,7 +107,7 @@ params['LSTM_widths'] = [50]
 
 
 params['data_train_len'] = r.randint(3, 6)
-params['batch_size'] = int(2 ** (r.randint(7, 9)))
+params['batch_size'] = 32 #int(2 ** (r.randint(7, 9)))
 steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
@@ -224,17 +224,17 @@ class regularized_loss1(_WeightedLoss):
             Linf2_den = tc.tensor(1.0)
 
         Linf1_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
+            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den).to(device)
         Linf2_penalty = tc.true_divide(
-        tc.norm(tc.norm(y[1] - tc.squeeze(tc.tensor(x[1, :, :])), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
-        loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
+        tc.norm(tc.norm(y[1] - tc.squeeze(tc.tensor(x[1, :, :])), p=tc.inf, dim=1), p=tc.inf), Linf2_den).to(device)
+        loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty).to(device)
 
         # ==== Define the regularization and add to loss. ====
         #         regularized_loss1 -- loss1 (autoencoder loss) + regularization
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
-            loss_L1 = tc.norm(model_params, 1)
+            loss_L1 = tc.norm(model_params, 1).to(device)
         else:
-            loss_L1 = tc.tensor([1, ], dtype=tc.float64)
+            loss_L1 = tc.tensor([1, ], dtype=tc.float64).to(device)
 
         l2_regularizer = sum(
         [tc.norm(tc.tensor(t), 2) for t in model_params])  # loss_L2 -- L2 regularization on weights W
@@ -259,7 +259,7 @@ class regularized_loss(_WeightedLoss):
         loss1 = params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
 
         # gets dynamics/prediction loss
-        loss2 = tc.tensor([1, ], dtype=tc.float64)
+        loss2 = tc.tensor([1, ], dtype=tc.float64).to(device)
         #loss2 = Variable(loss2.data, requires_grad=True)
         if params['num_shifts'] > 0:
             for j in tc.arange(params['num_shifts']):
@@ -276,7 +276,7 @@ class regularized_loss(_WeightedLoss):
             loss2 = loss2 / params['num_shifts']
 
         # K linear loss
-        loss3 = tc.tensor([1, ], dtype=tc.float64)
+        loss3 = tc.tensor([1, ], dtype=tc.float64).to(device)
         count_shifts_middle = 0
         if params['num_shifts_middle'] > 0:
             # generalization of: next_step = tf.matmul(g_list[0], L_pow)
