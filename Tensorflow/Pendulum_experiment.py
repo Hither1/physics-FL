@@ -2,7 +2,7 @@ import copy
 import numpy as np
 import random as r
 
-import training
+from Tensorflow.training import *
 from tensorflow.python.client import device_lib 
 print(device_lib.list_local_devices())
 params = {}
@@ -80,4 +80,4 @@ for count in range(200):  # loop to do random experiments
         wo = wopts[r.randint(0, len(wopts) - 1)]
         params['hidden_widths_omega'] = [wo, wo]
 
-    training.main_exp(copy.deepcopy(params))
+    main_exp(copy.deepcopy(params))

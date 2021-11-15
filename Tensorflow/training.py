@@ -4,8 +4,8 @@ import time
 import numpy as np
 import tensorflow as tf
 
-import helperfns
-import networkarch_tf as net
+from Tensorflow.helperfns import *
+import Tensorflow.networkarch_tf as net
 
 
 def define_loss(x, y, g_list, weights, biases, params):
@@ -149,7 +149,7 @@ def try_net(data_val, params):
     x, y, g_list, weights, biases = net.create_koopman_net(params)
     print("x", x)
 
-    max_shifts_to_stack = helperfns.num_shifts_in_stack(params)
+    max_shifts_to_stack = num_shifts_in_stack(params)
 
     # DEFINE LOSS FUNCTION
     trainable_var = tf.trainable_variables()
@@ -157,8 +157,8 @@ def try_net(data_val, params):
     loss_L1, loss_L2, regularized_loss, regularized_loss1 = define_regularization(params, trainable_var, loss, loss1)
 
     # CHOOSE OPTIMIZATION ALGORITHM
-    optimizer = helperfns.choose_optimizer(params, regularized_loss, trainable_var)
-    optimizer_autoencoder = helperfns.choose_optimizer(params, regularized_loss1, trainable_var)
+    optimizer = choose_optimizer(params, regularized_loss, trainable_var)
+    optimizer_autoencoder = choose_optimizer(params, regularized_loss1, trainable_var)
 
     # LAUNCH GRAPH AND INITIALIZE
     sess = tf.Session()
@@ -177,7 +177,7 @@ def try_net(data_val, params):
     count = 0
     best_error = 10000
 
-    data_val_tensor = helperfns.stack_data(data_val, max_shifts_to_stack, params['len_time'])
+    data_val_tensor = stack_data(data_val, max_shifts_to_stack, params['len_time'])
 
     start = time.time()
     finished = 0
@@ -192,9 +192,9 @@ def try_net(data_val, params):
 
         if (params['data_train_len'] > 1) or (f == 0):
             # don't keep reloading data if always same
-            data_train = np.loadtxt(('./data/%s/%s_train%d_x.csv' % (params['data_name'], params['data_name'], file_num)), delimiter=',',
+            data_train = np.loadtxt(('../data/%s/%s_train%d_x.csv' % (params['data_name'], params['data_name'], file_num)), delimiter=',',
                                     dtype=np.float64)
-            data_train_tensor = helperfns.stack_data(data_train, max_shifts_to_stack, params['len_time'])
+            data_train_tensor = stack_data(data_train, max_shifts_to_stack, params['len_time'])
             num_examples = data_train_tensor.shape[1]
             num_batches = int(np.floor(num_examples / params['batch_size']))
 
@@ -256,11 +256,11 @@ def try_net(data_val, params):
                 train_val_error[count, 15] = sess.run(loss_L2, feed_dict=feed_dict_val)
 
                 np.savetxt(csv_path, train_val_error, delimiter=',')
-                finished, save_now = helperfns.check_progress(start, best_error, params)
+                finished, save_now = check_progress(start, best_error, params)
                 count = count + 1
                 if save_now:
                     train_val_error_trunc = train_val_error[range(count), :]
-                    helperfns.save_files(sess, csv_path, train_val_error_trunc, params, weights, biases)
+                    save_files(sess, csv_path, train_val_error_trunc, params, weights, biases)
                 if finished:
                     break
 
@@ -272,7 +272,7 @@ def try_net(data_val, params):
     train_val_error = train_val_error[range(count), :]
     params['time_exp'] = time.time() - start
     saver.restore(sess, params['model_path'])
-    helperfns.save_files(sess, csv_path, train_val_error, params, weights, biases)
+    save_files(sess, csv_path, train_val_error, params, weights, biases)
     tf.reset_default_graph()
 
 
@@ -287,7 +287,7 @@ def main_exp(params):
         If doesn't already exist, creates folder params['folder_name']
         Saves files in that folder
     """
-    helperfns.set_defaults(params)
+    set_defaults(params)
 
     if not os.path.exists(params['folder_name']):
         os.makedirs(params['folder_name'])
@@ -295,5 +295,5 @@ def main_exp(params):
     tf.set_random_seed(params['seed'])
     np.random.seed(params['seed'])
     # data is num_steps x num_examples x n but load flattened version (matrix instead of tensor)
-    data_val = np.loadtxt(('./data/%s/%s_val_x.csv' % (params['data_name'], params['data_name'])), delimiter=',', dtype=np.float64)
+    data_val = np.loadtxt(('../data/%s/%s_val_x.csv' % (params['data_name'], params['data_name'])), delimiter=',', dtype=np.float64)
     try_net(data_val, params)

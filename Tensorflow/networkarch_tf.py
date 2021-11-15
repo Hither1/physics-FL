@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-import helperfns
+from Tensorflow.helperfns import *
 
 
 def weight_variable(shape, var_name, distribution='tn', scale=0.1):
@@ -386,7 +386,7 @@ def create_koopman_net(params):
     """
     depth = int((params['d'] - 4) / 2)
 
-    max_shifts_to_stack = helperfns.num_shifts_in_stack(params)
+    max_shifts_to_stack = num_shifts_in_stack(params)
 
     encoder_widths = params['widths'][0:depth + 2]  # n ... k
     x, weights, biases = encoder(encoder_widths, dist_weights=params['dist_weights'][0:depth + 1],

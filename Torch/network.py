@@ -3,7 +3,7 @@ import torch as tc
 import torch.nn as nn
 from torch.autograd import Variable
 import math
-import helper_torch
+from Torch.helper_torch import *
 import csv as csv
 
 
@@ -84,7 +84,7 @@ class koopman_net(nn.Module):
         # self.linear = nn.Linear(256, 2)
         depth = int((params['d'] - 4) / 2)
 
-        max_shifts_to_stack = helper_torch.num_shifts_in_stack(params)
+        max_shifts_to_stack = num_shifts_in_stack(params)
 
         encoder_widths = params['widths'][0:depth + 2]  # n ... k
         num_widths = len(params['widths'])
