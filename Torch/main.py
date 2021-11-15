@@ -4,11 +4,10 @@ import time
 import numpy as np
 import torch.distributed as dist
 import pandas as pd
-from Torch.helper_torch import *
-import Torch.network as net
-import torch.multiprocessing as processing
-from Dependency.Aggregation import *
-from Torch.GlobalParameters import *
+from helper_torch import *
+import network as net
+import multiprocessing as processing
+from GlobalParameters import *
 from matplotlib import cm
 import matplotlib.pyplot as plt
 import copy
@@ -20,7 +19,7 @@ import numpy as np
 import random as r
 from typing import Callable, Optional
 import torch.nn as nn
-import Torch._reduction as _Reduction
+import _reduction as _Reduction
 
 def _load_data(params, DATA_PATH):
     data = pd.read_csv(DATA_PATH, header=None)
@@ -348,6 +347,7 @@ finished = 0
 network = network.train()
 loss_fn = regularized_loss()
 loss1_fn = regularized_loss1()
+
 for f in range(params['data_train_len'] * params['num_passes_per_file']):
     if finished:
         break

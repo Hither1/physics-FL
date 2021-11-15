@@ -3,7 +3,7 @@ import torch as tc
 import torch.nn as nn
 from torch.autograd import Variable
 import math
-from Torch.helper_torch import *
+from helper_torch import *
 import csv as csv
 
 
