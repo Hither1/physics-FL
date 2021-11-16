@@ -109,7 +109,7 @@ params['LSTM_widths'] = [50]
 
 
 params['data_train_len'] = r.randint(3, 6)
-params['batch_size'] = 64 #int(2 ** (r.randint(7, 9)))
+params['batch_size'] = 32 #int(2 ** (r.randint(7, 9)))
 steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
@@ -240,7 +240,7 @@ class regularized_loss1(_WeightedLoss):
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
             loss_L1 = tc.norm(model_params, 1).to(device)
         else:
-            loss_L1 = tc.tensor([1, ], dtype=tc.float64).to(device)
+            loss_L1 = tc.zeros([1, ], dtype=tc.float64).to(device)
 
         l2_regularizer = sum(
         [tc.norm(tc.tensor(t), 2) for t in model_params])  # loss_L2 -- L2 regularization on weights W
@@ -359,7 +359,8 @@ class regularized_loss(_WeightedLoss):
             loss_L1 = tc.zeros([1, ], dtype=tc.float64)
 
         l2_regularizer = sum(
-        [tc.norm(tc.tensor(t), 2) for t in model_params])  # loss_L2 -- L2 regularization on weights W
+        [tc.norm(tc.tensor(m.weight), 2) for m in network.modules() if isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
+
         loss_L2 = params['L2_lam'] * l2_regularizer
         return loss + loss_L1 + loss_L2  # regularized_loss -- loss + regularization
 

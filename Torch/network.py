@@ -93,10 +93,12 @@ class koopman_net(nn.Module):
 
         #dist_biases=params['dist_biases'][0:depth + 1],
         encoder_layers = []
+
         for i in tc.arange(len(encoder_widths) - 1):
             fc_layer = nn.Linear(encoder_widths[i], encoder_widths[i + 1])
             fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, params['dist_weights'][0:depth + 1][i], params['scale'])
             # fc_layer = bias_initialize(fc_layer)
+
             encoder_layers.append(fc_layer)
             if params['act_type'] == "sigmoid":
                 encoder_layers.append(nn.Sigmoid(True))
@@ -107,9 +109,9 @@ class koopman_net(nn.Module):
 
         self.encoder = nn.Sequential(*encoder_layers)
         self.model_params = nn.ParameterList(self.encoder.parameters())
+
         #self.omega = omega_net(params, self.device)
         # params['num_encoder_weights'] = len(weights)/already done inside create_omega_net
-
 
         decoder_layers = []
         for i in tc.arange(len(decoder_widths) - 1):
@@ -160,6 +162,7 @@ class koopman_net(nn.Module):
             omega_net = nn.Sequential(*omega_net_layers)
             self.omega_parameters_real += nn.ParameterList(omega_net.parameters())
             self.omega_nets_real.append(omega_net)
+
 
         self.model_params.extend(nn.ParameterList(self.decoder.parameters()))
         self.model_params.extend(self.omega_parameters_real)
