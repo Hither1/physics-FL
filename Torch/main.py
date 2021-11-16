@@ -348,6 +348,8 @@ loss_fn = regularized_loss()
 loss1_fn = regularized_loss1()
 
 for f in range(params['data_train_len'] * params['num_passes_per_file']):
+    if f % 10 == 0:
+        print("current iteration: ", f+1)
     if finished:
         break
     file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
