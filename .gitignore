@@ -129,3 +129,6 @@ dmypy.json
 .pyre/
 
 exp2/
+
+nohup.out
+tc_error.txt
