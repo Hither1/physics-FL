@@ -2,6 +2,7 @@ import os
 import time
 
 import numpy as np
+import torch as tc
 import torch.distributed as dist
 import pandas as pd
 from helper_torch import *
@@ -20,6 +21,8 @@ import random as r
 from typing import Callable, Optional
 import torch.nn as nn
 import _reduction as _Reduction
+# import EarlyStopping
+#from pytorchtools import EarlyStopping
 
 def _load_data(params, DATA_PATH):
     data = pd.read_csv(DATA_PATH, header=None)
@@ -282,10 +285,22 @@ class regularized_loss(_WeightedLoss):
         count_shifts_middle = 0
         if params['num_shifts_middle'] > 0:
             # generalization of: next_step = tf.matmul(g_list[0], L_pow)
-            # omegas = self.omega(g_list[0])
-            # for param in self.params:
-            # next_step = self.varying_multiply(g_list[0], omegas, self.params['delta_t'], self.params['num_real'],
-            #                                self.params['num_complex_pairs'])
+            omegas = [] #self.omega(g_list[0])
+            for j in tc.arange(params['num_complex_pairs']):
+                ind = 2 * j
+                pair_of_columns = g_list[0][:, ind:ind + 2]
+                radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
+                omegas.append(
+                    self.omega_nets_complex[j](radius_of_pair))
+
+            for j in tc.arange(params['num_real']):
+                ind = 2 * params['num_complex_pairs'] + j
+                one_column = g_list[0][:, ind]
+                omegas.append(
+                    self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+
+            next_step = varying_multiply(g_list[0], omegas, params['delta_t'], self.params['num_real'],
+                                            params['num_complex_pairs'])
 
             # multiply g_list[0] by L (j+1) times
             for j in tc.arange(max(params['shifts_middle'])):
@@ -297,12 +312,25 @@ class regularized_loss(_WeightedLoss):
                     else:
                         loss3_denominator = tc.tensor(1.0)  # .double
                     loss3 = loss3 + params['mid_shift_lam'] * tc.true_divide(
-                        # tc.mean(tc.mean(tc.square(next_step - g_list[count_shifts_middle + 1]), 1)),
+                        tc.mean(tc.mean(tc.square(next_step - g_list[count_shifts_middle + 1]), 1)),
                         loss3_denominator)
                     count_shifts_middle += 1
-            # omegas = self.omega(next_step)
-            # next_step = self.varying_multiply(next_step, omegas, self.params['delta_t'], self.params['num_real'],
-            #                     self.params['num_complex_pairs'])
+                omegas = [] #self.omega(next_step)
+                for j in tc.arange(params['num_complex_pairs']):
+                    ind = 2 * j
+                    pair_of_columns = next_step[:, ind:ind + 2]
+                    radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
+                    omegas.append(
+                        self.omega_nets_complex[j](radius_of_pair))
+
+                for j in tc.arange(params['num_real']):
+                    ind = 2 * params['num_complex_pairs'] + j
+                    one_column = next_step[:, ind]
+                    omegas.append(
+                        self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+
+                next_step = self.varying_multiply(next_step, omegas, params['delta_t'], params['num_real'],
+                                params['num_complex_pairs'])
 
             loss3 = loss3 / params['num_shifts_middle']
 
@@ -334,10 +362,7 @@ class regularized_loss(_WeightedLoss):
         [tc.norm(tc.tensor(t), 2) for t in model_params])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = params['L2_lam'] * l2_regularizer
 
-        return loss1  # loss, loss1, loss_L1, loss_L2
-
-    # , loss  # regularized_loss -- loss + regularization
-    #def backward(self):
+        return loss + loss_L1 + loss_L2  # regularized_loss -- loss + regularization
 
 #============== End choose loss ==================
 
