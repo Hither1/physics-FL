@@ -252,7 +252,7 @@ class regularized_loss(_WeightedLoss):
     def __init__(self):
         super(regularized_loss, self).__init__()
 
-    def forward(self, params, model_params, x, y, g_list):
+    def forward(self, network, params, model_params, x, y, g_list):
         denominator_nonzero = 10 ** (-5)
         # loss1 -- autoencoder loss
         if params['relative_loss']:
@@ -291,15 +291,15 @@ class regularized_loss(_WeightedLoss):
                 pair_of_columns = g_list[0][:, ind:ind + 2]
                 radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
                 omegas.append(
-                    self.omega_nets_complex[j](radius_of_pair))
+                    network.omega_nets_complex[j](radius_of_pair))
 
             for j in tc.arange(params['num_real']):
                 ind = 2 * params['num_complex_pairs'] + j
                 one_column = g_list[0][:, ind]
                 omegas.append(
-                    self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+                    network.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
 
-            next_step = varying_multiply(g_list[0], omegas, params['delta_t'], self.params['num_real'],
+            next_step = network.varying_multiply(g_list[0], omegas, params['delta_t'], params['num_real'],
                                             params['num_complex_pairs'])
 
             # multiply g_list[0] by L (j+1) times
@@ -321,15 +321,15 @@ class regularized_loss(_WeightedLoss):
                     pair_of_columns = next_step[:, ind:ind + 2]
                     radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
                     omegas.append(
-                        self.omega_nets_complex[j](radius_of_pair))
+                        network.omega_nets_complex[j](radius_of_pair))
 
                 for j in tc.arange(params['num_real']):
                     ind = 2 * params['num_complex_pairs'] + j
                     one_column = next_step[:, ind]
                     omegas.append(
-                        self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+                        network.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
 
-                next_step = self.varying_multiply(next_step, omegas, params['delta_t'], params['num_real'],
+                next_step = network.varying_multiply(next_step, omegas, params['delta_t'], params['num_real'],
                                 params['num_complex_pairs'])
 
             loss3 = loss3 / params['num_shifts_middle']
@@ -395,7 +395,7 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             offset = 0
         batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
         y, g_list = network(batch_data_train)
-        regularized_loss = loss_fn(params, network.model_params, batch_data_train, y, g_list)  # regularized_lossregularized_loss
+        regularized_loss = loss_fn(network, params, network.model_params, batch_data_train, y, g_list)  # regularized_lossregularized_loss
         regularized_loss1 = loss1_fn(params, network.model_params, batch_data_train, y, g_list)
         before = list(network.parameters())
         if (not network.params['been5min']) and network.params['auto_first']:
@@ -410,11 +410,11 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             optimizer.zero_grad()
             regularized_loss.backward()
 
-        """for name, param in network.named_parameters():
+        for name, param in network.named_parameters():
             if param.grad is not None:
                 print(name, param.grad.sum())
             else:
-                print(name, param.grad)"""
+                print(name, param.grad)
         optimizer.step()
         after = list(network.parameters())
         #print('change in param', np.array(after) - np.array(before))
@@ -423,7 +423,7 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             #train_error = network.regularized_loss(batch_data_train, y, g_list) # reg_train_err
             y, g_list = network(data_val_tensor)
 
-            val_error = loss_fn(params, network.model_params, data_val_tensor, y, g_list) # reg_val_err
+            val_error = loss_fn(network, params, network.model_params, data_val_tensor, y, g_list) # reg_val_err
             if val_error < (best_error - best_error * (10 ** (-5))):
                 best_error = val_error#.copy()
                 print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
