@@ -254,6 +254,7 @@ class koopman_net(nn.Module):
             one_column = g_list[0][:, ind]
             omegas.append(
                 self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+        omegas = tc.stack(omegas, dim=0)
 
         #y = []  # y[0] is x[0,:,:] encoded and then decoded (no stepping forward)
         y = tc.unsqueeze(self.decoder(g_list[0]), 0)
@@ -280,6 +281,7 @@ class koopman_net(nn.Module):
                 omegas.append(
                     self.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
 
+            omegas = tc.stack(omegas, dim=0)
             advanced_layer = self.varying_multiply(advanced_layer, omegas, self.params['delta_t'],
                                                    self.params['num_real'],
                                                    self.params['num_complex_pairs'])

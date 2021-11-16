@@ -155,6 +155,7 @@ def try_net(data_val, params):
     trainable_var = tf.trainable_variables()
     loss1, loss2, loss3, loss_Linf, loss = define_loss(x, y, g_list, weights, biases, params)
     loss_L1, loss_L2, regularized_loss, regularized_loss1 = define_regularization(params, trainable_var, loss, loss1)
+    print("loss_L1", loss_L1)
 
     # CHOOSE OPTIMIZATION ALGORITHM
     optimizer = choose_optimizer(params, regularized_loss, trainable_var)

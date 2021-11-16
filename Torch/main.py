@@ -109,7 +109,7 @@ params['LSTM_widths'] = [50]
 
 
 params['data_train_len'] = r.randint(3, 6)
-params['batch_size'] = 32 #int(2 ** (r.randint(7, 9)))
+params['batch_size'] = 64 #int(2 ** (r.randint(7, 9)))
 steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
@@ -137,6 +137,7 @@ elif do == 2:
 
 # Training
 set_defaults(params)
+print("param L1", params['L1_lam'])
 network = net.koopman_net(params, task=task)
 
 ## wheter use gpu
@@ -265,7 +266,6 @@ class regularized_loss(_WeightedLoss):
 
         # gets dynamics/prediction loss
         loss2 = tc.tensor([1, ], dtype=tc.float64).to(device)
-        #loss2 = Variable(loss2.data, requires_grad=True)
         if params['num_shifts'] > 0:
             for j in tc.arange(params['num_shifts']):
                 # xk+1, xk+2, xk+3
@@ -298,6 +298,7 @@ class regularized_loss(_WeightedLoss):
                 one_column = g_list[0][:, ind]
                 omegas.append(
                     network.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+            omegas = tc.stack(omegas, dim=0)
 
             next_step = network.varying_multiply(g_list[0], omegas, params['delta_t'], params['num_real'],
                                             params['num_complex_pairs'])
@@ -328,6 +329,7 @@ class regularized_loss(_WeightedLoss):
                     one_column = next_step[:, ind]
                     omegas.append(
                         network.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
+                omegas = tc.stack(omegas, dim=0)
 
                 next_step = network.varying_multiply(next_step, omegas, params['delta_t'], params['num_real'],
                                 params['num_complex_pairs'])
@@ -351,17 +353,14 @@ class regularized_loss(_WeightedLoss):
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
 
         loss = loss1 + loss2 + loss3 + loss_Linf
-    # ==== Define the regularization and add to loss. ====
-    #         regularized_loss1 -- loss1 (autoencoder loss) + regularization
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
-            loss_L1 = tc.norm(model_params, 1)
+            loss_L1 = tc.norm(model_params, 1) * params['L1_lam']
         else:
-            loss_L1 = tc.tensor([1, ], dtype=tc.float64)
+            loss_L1 = tc.zeros([1, ], dtype=tc.float64)
 
         l2_regularizer = sum(
         [tc.norm(tc.tensor(t), 2) for t in model_params])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = params['L2_lam'] * l2_regularizer
-
         return loss + loss_L1 + loss_L2  # regularized_loss -- loss + regularization
 
 #============== End choose loss ==================
@@ -371,7 +370,7 @@ finished = 0
 network = network.train()
 loss_fn = regularized_loss()
 loss1_fn = regularized_loss1()
-
+#print("total iterations", params['data_train_len'] * params['num_passes_per_file']*params['num_steps_per_batch']* int(np.floor(num_examples / params['batch_size'])))
 for f in range(params['data_train_len'] * params['num_passes_per_file']):
     if f % 10 == 0:
         print("current iteration: ", f+1)
@@ -410,13 +409,13 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             optimizer.zero_grad()
             regularized_loss.backward()
 
-        for name, param in network.named_parameters():
+        '''for name, param in network.named_parameters():
             if param.grad is not None:
                 print(name, param.grad.sum())
             else:
                 print(name, param.grad)
         optimizer.step()
-        after = list(network.parameters())
+        after = list(network.parameters())'''
         #print('change in param', np.array(after) - np.array(before))
 
         if step % 20 == 0:
