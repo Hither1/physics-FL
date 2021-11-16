@@ -265,7 +265,7 @@ class regularized_loss(_WeightedLoss):
         loss1 = params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
 
         # gets dynamics/prediction loss
-        loss2 = tc.tensor([1, ], dtype=tc.float64).to(device)
+        loss2 = tc.zeros([1, ], dtype=tc.float64).to(device)
         if params['num_shifts'] > 0:
             for j in tc.arange(params['num_shifts']):
                 # xk+1, xk+2, xk+3
@@ -281,7 +281,7 @@ class regularized_loss(_WeightedLoss):
             loss2 = loss2 / params['num_shifts']
 
         # K linear loss
-        loss3 = tc.tensor([1, ], dtype=tc.float64).to(device)
+        loss3 = tc.zeros([1, ], dtype=tc.float64).to(device)
         count_shifts_middle = 0
         if params['num_shifts_middle'] > 0:
             # generalization of: next_step = tf.matmul(g_list[0], L_pow)
@@ -292,14 +292,12 @@ class regularized_loss(_WeightedLoss):
                 radius_of_pair = tc.sum(tc.square(pair_of_columns), dim=1, keepdim=True)
                 omegas.append(
                     network.omega_nets_complex[j](radius_of_pair))
-
             for j in tc.arange(params['num_real']):
                 ind = 2 * params['num_complex_pairs'] + j
                 one_column = g_list[0][:, ind]
                 omegas.append(
                     network.omega_nets_real[j](tc.unsqueeze(one_column[:], 0)))
             omegas = tc.stack(omegas, dim=0)
-
             next_step = network.varying_multiply(g_list[0], omegas, params['delta_t'], params['num_real'],
                                             params['num_complex_pairs'])
 
@@ -335,7 +333,6 @@ class regularized_loss(_WeightedLoss):
                                 params['num_complex_pairs'])
 
             loss3 = loss3 / params['num_shifts_middle']
-
     # inf norm on autoencoder error and one prediction step
         if params['relative_loss']:
             Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1),
@@ -359,7 +356,7 @@ class regularized_loss(_WeightedLoss):
             loss_L1 = tc.zeros([1, ], dtype=tc.float64)
 
         l2_regularizer = sum(
-        [tc.norm(tc.tensor(m.weight), 2) for m in network.modules() if isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
+        [tc.sum(tc.square(tc.tensor(m.weight))) for m in network.modules() if isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
 
         loss_L2 = params['L2_lam'] * l2_regularizer
         return loss + loss_L1 + loss_L2  # regularized_loss -- loss + regularization
