@@ -342,7 +342,6 @@ class regularized_loss(_WeightedLoss):
 #============== End choose loss ==================
 
 best_error = 10000
-error_records = []
 finished = 0
 network = network.train()
 loss_fn = regularized_loss()
@@ -361,6 +360,7 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
     np.random.shuffle(ind)
     data_train_tensor = data_train_tensor[:, ind, :]
 
+    save_error = []
     for step in range(params['num_steps_per_batch'] * num_batches):
         if params['batch_size'] < data_train_tensor.shape[1]:
             offset = (step * params['batch_size']) % (num_examples - params['batch_size'])
@@ -400,19 +400,23 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             if val_error < (best_error - best_error * (10 ** (-5))):
                 best_error = val_error#.copy()
                 print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
-                    best_error, regularized_loss, val_error))# (with reg. train err %f and reg. val err %f)
+                    best_error, regularized_loss, val_error))
+            with open("./tc_error.txt", "a") as file_object:
+                file_object.write(str(best_error.item())+' '+str(regularized_loss.item())+' '+str(val_error.item())+"\n")
+            #save_error.append([best_error.item(), regularized_loss.item(), val_error.item()])
+# (with reg. train err %f and reg. val err %f)
             #error_records.append([best_error, regularized_loss, val_error])#, reg_train_err, reg_val_err])
 
         if step > params['num_steps_per_file_pass']:
             params['stop_condition'] = 'reached num_steps_per_file_pass'
             break
 
-    #if device == 'cuda':
+#if device == 'cuda':
         #tp = copy.deepcopy(network)
         #tp.to('cpu')
         #elif device == 'cpu':
-
-pd.Dataframe(error_records).to_csv('./tc_errors.csv')
+print("done")
+#pd.Dataframe(error_records).to_csv('./tc_errors.csv')
 
 # =================== FL methods (EDITABLE) ====================
 """def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, params):
