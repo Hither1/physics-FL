@@ -243,7 +243,7 @@ class regularized_loss1(_WeightedLoss):
             loss_L1 = tc.zeros([1, ], dtype=tc.float64).to(device)
 
         l2_regularizer = sum(
-        [tc.norm(tc.tensor(t), 2) for t in model_params])  # loss_L2 -- L2 regularization on weights W
+        [tc.sum(tc.square(tc.tensor(m.weight))) for m in network.modules() if isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = params['L2_lam'] * l2_regularizer
         regularized_loss1 = loss1 + loss_L1 + loss_L2
         return regularized_loss1  # loss, loss1, loss_L1, loss_L2
