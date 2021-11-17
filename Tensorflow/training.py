@@ -157,7 +157,6 @@ def try_net(data_val, params):
     trainable_var = tf.trainable_variables()
     loss1, loss2, loss3, loss_Linf, loss = define_loss(x, y, g_list, weights, biases, params)
     loss_L1, loss_L2, regularized_loss, regularized_loss1 = define_regularization(params, trainable_var, loss, loss1)
-    print("loss_L1", loss_L1)
 
     # CHOOSE OPTIMIZATION ALGORITHM
     optimizer = choose_optimizer(params, regularized_loss, trainable_var)
@@ -258,7 +257,7 @@ def try_net(data_val, params):
                 train_val_error[count, 14] = sess.run(loss_L2, feed_dict=feed_dict_train_loss)
                 train_val_error[count, 15] = sess.run(loss_L2, feed_dict=feed_dict_val)
 
-                np.savetxt(csv_path, train_val_error, delimiter=',')
+                #np.savetxt(csv_path, train_val_error, delimiter=',')
                 finished, save_now = check_progress(start, best_error, params)
                 count = count + 1
                 if save_now:
@@ -266,9 +265,14 @@ def try_net(data_val, params):
                     save_files(sess, csv_path, train_val_error_trunc, params, weights, biases)
                 if finished:
                     break
+                with open("results/tf_error_"+str(params['batch_size'])+"_lr_"+str(params['learning_rate'])+".txt", "a") as file_object:
+                    file_object.write(
+                        str(best_error[0]) + ' ' + str(reg_train_err[0]) + ' ' + str(reg_val_err[0]) + "\n")
 
-            if step > params['num_steps_per_file_pass']:
+
+            if step > params['num_steps_per_file_pass'] or best_error < 2 * 10**(-4):
                 params['stop_condition'] = 'reached num_steps_per_file_pass'
+                finished = True
                 break
 
     # SAVE RESULTS

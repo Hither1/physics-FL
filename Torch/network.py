@@ -40,38 +40,19 @@ def weight_initialize(shape, layer, dist='tn', scale=0.1):
     return layer
 
 
-def bias_initialize(shape, layer, distribution=''):
+def bias_initialize(layer, distribution=''):
     """Create a variable for a bias vector.
     Arguments:
         shape -- array giving shape of output bias variable
         var_name -- string naming bias variable
         distribution -- string for which distribution to use for random initialization (file name) (default '')
     """
-    # if distribution:
-    #
-    #   nn.init.constant_(layer.bias, 0.0)
-    # else:
-    nn.init.constant_(layer.bias, 0.0)
+    if distribution:
+        nn.init.constant_(layer.bias, 0.0)
+    else:
+        nn.init.constant_(layer.bias, 0.0)
     return layer
 
-
-class omega_net(nn.Module):
-
-        # params['num_omega_weights'] = len(params['widths_omega_real']) - 1
-
-
-    def forward(self, ycoords):
-        """Apply the omega (auxiliary) network(s) to the y-coordinates.
-            Arguments:
-                params -- dictionary of parameters for experiment
-                ycoords -- array of shape [None, k] of y-coordinates, where L will be k x k
-            Returns:
-                omegas -- list, output of omega (auxiliary) network(s) applied to  ycoords
-            """
-        omegas = [] #nn.ModuleList()
-
-
-        return omegas
 
 
 
@@ -87,17 +68,16 @@ class koopman_net(nn.Module):
         max_shifts_to_stack = num_shifts_in_stack(params)
 
         encoder_widths = params['widths'][0:depth + 2]  # n ... k
+        print("encoder widths", encoder_widths)
         num_widths = len(params['widths'])
         decoder_widths = params['widths'][depth + 2:num_widths]  # k ... n
         # encoder_widths,  num_encoder_weights = 1
 
         #dist_biases=params['dist_biases'][0:depth + 1],
         encoder_layers = []
-
-        for i in tc.arange(len(encoder_widths) - 1):
+        for i in tc.arange(len(encoder_widths) - 2):
             fc_layer = nn.Linear(encoder_widths[i], encoder_widths[i + 1])
             fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, params['dist_weights'][0:depth + 1][i], params['scale'])
-            # fc_layer = bias_initialize(fc_layer)
 
             encoder_layers.append(fc_layer)
             if params['act_type'] == "sigmoid":
@@ -106,7 +86,10 @@ class koopman_net(nn.Module):
                 encoder_layers.append(nn.ReLU())
             elif params['act_type'] == "elu":
                 encoder_layers.append(nn.ELU(True))
-
+        fc_layer = nn.Linear(encoder_widths[len(encoder_widths)-2], encoder_widths[len(encoder_widths)-1])
+        fc_layer = weight_initialize([encoder_widths[len(encoder_widths)-2], encoder_widths[len(encoder_widths)-1]], fc_layer,
+                                     params['dist_weights'][0:depth + 1][len(encoder_widths)-2], params['scale'])
+        encoder_layers.append(fc_layer)
         self.encoder = nn.Sequential(*encoder_layers)
         self.model_params = nn.ParameterList(self.encoder.parameters())
 
@@ -114,7 +97,7 @@ class koopman_net(nn.Module):
         # params['num_encoder_weights'] = len(weights)/already done inside create_omega_net
 
         decoder_layers = []
-        for i in tc.arange(len(decoder_widths) - 1):
+        for i in tc.arange(len(decoder_widths) - 2):
             ind = i + 1
             fc_layer = nn.Linear(decoder_widths[i], decoder_widths[i + 1])
             fc_layer = weight_initialize([decoder_widths[i], decoder_widths[i + 1]], fc_layer, params['scale'])
@@ -125,6 +108,9 @@ class koopman_net(nn.Module):
                 decoder_layers.append(nn.ReLU())
             elif params['act_type'] == "elu":
                 decoder_layers.append(nn.ELU(True))
+        fc_layer = nn.Linear(decoder_widths[len(decoder_widths) - 2], decoder_widths[len(decoder_widths)-1])
+        fc_layer = weight_initialize([decoder_widths[len(decoder_widths) - 2], decoder_widths[len(decoder_widths) - 1]], fc_layer, params['scale'])
+        decoder_layers.append(fc_layer)
         self.decoder = nn.Sequential(*decoder_layers)
 
         self.omega_parameters_complex, self.omega_parameters_real, self.omega_nets_complex, self.omega_nets_real = nn.ParameterList(), nn.ParameterList(), nn.ModuleList(), nn.ModuleList()
@@ -162,7 +148,6 @@ class koopman_net(nn.Module):
             omega_net = nn.Sequential(*omega_net_layers)
             self.omega_parameters_real += nn.ParameterList(omega_net.parameters())
             self.omega_nets_real.append(omega_net)
-
 
         self.model_params.extend(nn.ParameterList(self.decoder.parameters()))
         self.model_params.extend(self.omega_parameters_real)
@@ -243,7 +228,15 @@ class koopman_net(nn.Module):
                 x_shift = tc.squeeze(x[shift, :])
 
             x_shift_list.append(x_shift)
+
         g_list = self.encoder(tc.stack(x_shift_list, dim=0))
+        #print("checking g_list out of encoder", g_list)
+        #print("x", x)
+        """if math.isnan(g_list[0][0][0]):
+            tc.set_printoptions(profile="full")
+            print("checking g_list out of encoder", g_list)
+            print("x", x)
+            tc.set_printoptions(profile="default")"""
         omegas = []
         for j in tc.arange(self.params['num_complex_pairs']):
             ind = 2 * j

@@ -131,4 +131,5 @@ dmypy.json
 exp2/
 
 nohup.out
-tc_error.txt
+Torch/results
+Tensorflow/results

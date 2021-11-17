@@ -395,7 +395,7 @@ def create_koopman_net(params):
     params['num_encoder_weights'] = len(weights)
     g_list = encoder_apply(x, weights, biases, params['act_type'], shifts_middle=params['shifts_middle'],
                            num_encoder_weights=params['num_encoder_weights'])
-
+    #g_list = tf.Print(g_list, ['num_kv: ', g_list], summarize=50)
     # g_list_omega is list of omegas, one entry for each middle_shift of x (like g_list)
     omegas, weights_omega, biases_omega = create_omega_net(params, g_list[0])
     # params['num_omega_weights'] = len(weights_omega) already done inside create_omega_net

@@ -52,32 +52,32 @@ params['min_3hr'] = .000004
 params['min_4hr'] = .0000005
 params['min_halfway'] = 1
 
-for count in range(200):  # loop to do random experiments
-    params['data_train_len'] = r.randint(3, 6)
-    params['batch_size'] = 32#int(2 ** (r.randint(7, 9)))
-    steps_to_see_all = num_examples / params['batch_size']
-    params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
-    params['L2_lam'] = 10 ** (-r.randint(13, 14))
-    params['Linf_lam'] = 10 ** (-r.randint(7, 10))
 
-    d = r.randint(1, 2)
-    if d == 1:
-        wopts = np.arange(100, 200, 5)
-        w = wopts[r.randint(0, len(wopts) - 1)]
-        params['widths'] = [n, w, k, k, w, n]
-    elif d == 2:
-        wopts = np.arange(30, 90, 5)
-        w = wopts[r.randint(0, len(wopts) - 1)]
-        params['widths'] = [n, w, w, k, k, w, w, n]
+params['data_train_len'] = r.randint(3, 6)
+params['batch_size'] = 128 #int(2 ** (r.randint(7, 9)))
+steps_to_see_all = num_examples / params['batch_size']
+params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
+params['L2_lam'] = 10 ** (-r.randint(13, 14))
+params['Linf_lam'] = 10 ** (-r.randint(7, 10))
 
-    do = r.randint(1, 2)
-    if do == 1:
-        wopts = np.arange(140, 190, 5)
-        wo = wopts[r.randint(0, len(wopts) - 1)]
-        params['hidden_widths_omega'] = [wo, ]
-    elif do == 2:
-        wopts = np.arange(10, 55, 5)
-        wo = wopts[r.randint(0, len(wopts) - 1)]
-        params['hidden_widths_omega'] = [wo, wo]
+d = r.randint(1, 2)
+if d == 1:
+    wopts = np.arange(100, 200, 5)
+    w = wopts[r.randint(0, len(wopts) - 1)]
+    params['widths'] = [n, w, k, k, w, n]
+elif d == 2:
+    wopts = np.arange(30, 90, 5)
+    w = wopts[r.randint(0, len(wopts) - 1)]
+    params['widths'] = [n, w, w, k, k, w, w, n]
 
-    main_exp(copy.deepcopy(params))
+do = r.randint(1, 2)
+if do == 1:
+    wopts = np.arange(140, 190, 5)
+    wo = wopts[r.randint(0, len(wopts) - 1)]
+    params['hidden_widths_omega'] = [wo, ]
+elif do == 2:
+    wopts = np.arange(10, 55, 5)
+    wo = wopts[r.randint(0, len(wopts) - 1)]
+    params['hidden_widths_omega'] = [wo, wo]
+
+main_exp(copy.deepcopy(params))
