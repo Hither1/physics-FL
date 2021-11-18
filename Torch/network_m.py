@@ -1,3 +1,7 @@
+'''
+    This file contains a network structure that's essentially the same
+'''
+
 import pandas as pd
 import torch as tc
 import torch.nn as nn
@@ -90,7 +94,6 @@ class koopman_net(nn.Module):
                                      params['dist_weights'][0:depth + 1][len(encoder_widths)-2], params['scale'])
         encoder_layers.append(fc_layer)
         self.encoder = nn.Sequential(*encoder_layers).double()
-        #self.model_params = nn.ParameterList(self.encoder.parameters())
 
         #self.omega = omega_net(params, self.device)
         # params['num_encoder_weights'] = len(weights)/already done inside create_omega_net
@@ -111,7 +114,6 @@ class koopman_net(nn.Module):
         fc_layer = weight_initialize([decoder_widths[len(decoder_widths) - 2], decoder_widths[len(decoder_widths) - 1]], fc_layer, params['scale'])
         decoder_layers.append(fc_layer)
         self.decoder = nn.Sequential(*decoder_layers).double()
-
         self.omega_nets_complex, self.omega_nets_real = nn.ModuleList(), nn.ModuleList()
         for j in tc.arange(params['num_complex_pairs']):
             omega_net_layers = []
@@ -155,8 +157,7 @@ class koopman_net(nn.Module):
             #self.omega_parameters_real += nn.ParameterList(omega_net.parameters())
             self.omega_nets_real.append(omega_net)
 
-        #self.model_params.extend(nn.ParameterList(self.decoder.parameters()))
-        #self.model_params.extend(self.omega_parameters_real)
+
         #params['num_decoder_weights'] = depth + 1
         # datasets
 

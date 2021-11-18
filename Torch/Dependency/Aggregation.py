@@ -10,7 +10,7 @@ def __distance__(current_local_model: dict, target_local_model: dict):
         final_distance += tc.sum((current_local_model[i].cpu() - target_local_model[i].cpu()) ** 2)
     return float(pow(final_distance, 0.5))
 
-def FedAvg(current_local_models: list, size_local_dataset: list):
+def FedKoopman(current_local_models: list, size_local_dataset: list):
     try:
         final_model = {}
         model_layer_list = current_local_models[0].keys()

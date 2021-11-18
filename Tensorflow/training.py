@@ -149,7 +149,6 @@ def try_net(data_val, params):
     """
     # SET UP NETWORK
     x, y, g_list, weights, biases = net.create_koopman_net(params)
-    print("x", x)
 
     max_shifts_to_stack = num_shifts_in_stack(params)
 
@@ -225,6 +224,15 @@ def try_net(data_val, params):
                 sess.run(optimizer, feed_dict=feed_dict_train)
 
             if step % 20 == 0:
+                print("current weights")
+                for key, val in weights.items():
+                    #print(key, val)
+                    if "OC1_1" in key:
+                    #val = tf.print(val, [val], summarize=50)
+                        print(key)
+                        print(sess.run(val))
+
+
                 train_error = sess.run(loss, feed_dict=feed_dict_train_loss)
                 val_error = sess.run(loss, feed_dict=feed_dict_val)
 

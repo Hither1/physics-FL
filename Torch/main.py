@@ -1,3 +1,8 @@
+'''
+    This file contains the 1st part of our experiment
+    which is to check the basic performance of
+'''
+
 import os
 import time
 
@@ -22,7 +27,8 @@ from typing import Callable, Optional
 import torch.nn as nn
 import _reduction as _Reduction
 
-
+tc.set_printoptions(precision=8)
+#tc.autograd.set_detect_anomaly(True)
 # import EarlyStopping
 # from pytorchtools import EarlyStopping
 
@@ -139,7 +145,10 @@ elif do == 2:
 set_defaults(params)
 print("param L1", params['L1_lam'])
 network = net.koopman_net(params, task=task)
-
+network = network.double()
+print("Model's state_dict:")
+for param_tensor in network.state_dict():
+    print(param_tensor, "\t", network.state_dict()[param_tensor].size())
 ## wheter use gpu
 use_cuda = tc.cuda.is_available()
 device = tc.device("cuda" if use_cuda else "cpu")
@@ -150,12 +159,12 @@ if use_cuda:
 network.to(device)
 # network.load_state_dict(init_model)
 if params['opt_alg'] == 'adam':
-    optimizer, optimizer_autoencoder = tc.optim.Adam(network.model_params,
+    optimizer, optimizer_autoencoder = tc.optim.Adam(network.parameters(),
                                                      lr=params['learning_rate']), tc.optim.Adam(
-        network.model_params, lr=params['learning_rate'])
+        network.parameters(), lr=params['learning_rate'])
 elif params['opt_alg'] == 'adadelta':
     if params['decay_rate'] > 0:
-        optimizer = tc.optim.Adadelta(network.model_params, params['learning_rate'], params['decay_rate'])
+        optimizer = tc.optim.Adadelta(network.parameters(), params['learning_rate'], params['decay_rate'])
     else:  # defaults 0.001, 0.95
         optimizer = tc.optim.Adadelta(lr=params['learning_rate'])
 elif params['opt_alg'] == 'adagrad':  # also has initial_accumulator_value parameter
@@ -214,7 +223,7 @@ class regularized_loss1(_WeightedLoss):
     def __init__(self):
         super(regularized_loss1, self).__init__()
 
-    def forward(self, params, model_params, x, y, g_list):
+    def forward(self, params, model_params, x, y):
         denominator_nonzero = 10 ** (-5)
         # loss1 -- autoencoder loss
         if params['relative_loss']:
@@ -231,7 +240,7 @@ class regularized_loss1(_WeightedLoss):
         else:
             loss_L1 = tc.zeros([1, ], dtype=tc.float64).to(device)
         l2_regularizer = sum(
-            [tc.sum(tc.square(tc.tensor(m.weight))) for m in network.modules() if
+            [tc.sum(tc.square(m.weight)) for m in network.modules() if
              isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = params['L2_lam'] * l2_regularizer
         return loss1 + loss_L1 + loss_L2
@@ -342,7 +351,7 @@ class regularized_loss(_WeightedLoss):
             loss_L1 = tc.zeros([1, ], dtype=tc.float64)
 
         l2_regularizer = sum(
-            [tc.sum(tc.square(tc.tensor(m.weight))) for m in network.modules() if
+            [tc.sum(tc.square(m.weight)) for m in network.modules() if
              isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
 
         loss_L2 = params['L2_lam'] * l2_regularizer
@@ -352,7 +361,7 @@ class loss(_WeightedLoss):
     def __init__(self):
         super(loss, self).__init__()
 
-    def forward(self, network, params, model_params, x, y, g_list):
+    def forward(self, network, params, x, y, g_list):
         denominator_nonzero = 10 ** (-5)
         # loss1 -- autoencoder loss
         if params['relative_loss']:
@@ -456,7 +465,6 @@ network = network.train()
 reg_loss_fn = regularized_loss()
 reg_loss1_fn = regularized_loss1()
 loss_fn = loss()
-# print("total iterations", params['data_train_len'] * params['num_passes_per_file']*params['num_steps_per_batch']* int(np.floor(num_examples / params['batch_size'])))
 for f in range(params['data_train_len'] * params['num_passes_per_file']):
     if f % 10 == 0:
         print("current iteration: ", f + 1)
@@ -468,11 +476,9 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
         params['data_name'], params['data_name'], file_num)).to(device)
         num_examples = data_train_tensor.shape[1]
         num_batches = int(np.floor(num_examples / params['batch_size']))
-
     ind = tc.arange(num_examples)
     np.random.shuffle(ind)
     data_train_tensor = data_train_tensor[:, ind, :]
-
     save_error = []
     for step in range(params['num_steps_per_batch'] * num_batches):
         if params['batch_size'] < data_train_tensor.shape[1]:
@@ -481,35 +487,35 @@ for f in range(params['data_train_len'] * params['num_passes_per_file']):
             offset = 0
         batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
         y, g_list = network(batch_data_train)
-        regularized_loss = reg_loss_fn(network, params, network.model_params, batch_data_train, y,
+        regularized_loss = reg_loss_fn(network, params, nn.ParameterList(network.parameters()), batch_data_train, y,
                                    g_list)  # regularized_lossregularized_loss
-        regularized_loss1 = reg_loss1_fn(params, network.model_params, batch_data_train, y, g_list)
+        regularized_loss1 = reg_loss1_fn(params, nn.ParameterList(network.parameters()), batch_data_train, y)
         if (not network.params['been5min']) and network.params['auto_first']:
             optimizer_autoencoder.zero_grad()
-            # regularized_loss1.retain_grad()
             regularized_loss1.backward()
             optimizer_autoencoder.step()
-
         else:
             optimizer.zero_grad()
             regularized_loss.backward()
             optimizer.step()
 
-        """for name, param in network.named_parameters():
+        for name, param in network.named_parameters():
             if param.grad is not None:
                 print(name, param.grad.sum())
             else:
                 print(name, param.grad)
-        after = list(network.parameters())"""
-        # print('change in param', np.array(after) - np.array(before))
 
         if step % 20 == 0:
+            """print("check K")
+            for layer in network.omega_nets_complex[0].children():
+                if isinstance(layer, nn.Linear):
+                    print(layer.weight)"""
             # train_error = network.regularized_loss(batch_data_train, y, g_list) # reg_train_err
             y, g_list = network(data_val_tensor)
-            val_error = loss_fn(network, params, network.model_params, data_val_tensor, y, g_list)  # reg_val_err
+            val_error = loss_fn(network, params, data_val_tensor, y, g_list)  # reg_val_err
             if val_error.item() < (best_error - best_error * (10 ** (-5))):
                 best_error = val_error.item()  # .copy()
-                reg_val_error = reg_loss_fn(network, params, network.model_params, data_val_tensor, y, g_list)
+                reg_val_error = reg_loss_fn(network, params, nn.ParameterList(network.parameters()), data_val_tensor, y, g_list)
                 print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
                     best_error, regularized_loss.item(), reg_val_error.item()))
             with open("results/tc_error_"+str(params['batch_size'])+"_lr_"+str(params['learning_rate'])+".txt", "a") as file_object:

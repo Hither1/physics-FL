@@ -1,3 +1,8 @@
+'''
+    This file contains the 2nd part of our experiment
+    which is to
+'''
+
 import os
 import time
 
@@ -22,7 +27,8 @@ from typing import Callable, Optional
 import torch.nn as nn
 import _reduction as _Reduction
 
-
+tc.set_printoptions(precision=8)
+tc.autograd.set_detect_anomaly(True)
 # import EarlyStopping
 # from pytorchtools import EarlyStopping
 
@@ -109,7 +115,7 @@ params['num_LSTM_hidden_weights'] = 1
 params['LSTM_widths'] = [50]
 
 params['data_train_len'] = r.randint(3, 6)
-params['batch_size'] = 32  # int(2 ** (r.randint(7, 9)))
+params['batch_size'] = 128  # int(2 ** (r.randint(7, 9)))
 steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
@@ -139,7 +145,10 @@ elif do == 2:
 set_defaults(params)
 print("param L1", params['L1_lam'])
 network = net.koopman_net(params, task=task)
-
+network = network.double()
+print("Model's state_dict:")
+for param_tensor in network.state_dict():
+    print(param_tensor, "\t", network.state_dict()[param_tensor].size())
 ## wheter use gpu
 use_cuda = tc.cuda.is_available()
 device = tc.device("cuda" if use_cuda else "cpu")
@@ -150,12 +159,12 @@ if use_cuda:
 network.to(device)
 # network.load_state_dict(init_model)
 if params['opt_alg'] == 'adam':
-    optimizer, optimizer_autoencoder = tc.optim.Adam(network.model_params,
+    optimizer, optimizer_autoencoder = tc.optim.Adam(network.parameters(),
                                                      lr=params['learning_rate']), tc.optim.Adam(
-        network.model_params, lr=params['learning_rate'])
+        network.parameters(), lr=params['learning_rate'])
 elif params['opt_alg'] == 'adadelta':
     if params['decay_rate'] > 0:
-        optimizer = tc.optim.Adadelta(network.model_params, params['learning_rate'], params['decay_rate'])
+        optimizer = tc.optim.Adadelta(network.parameters(), params['learning_rate'], params['decay_rate'])
     else:  # defaults 0.001, 0.95
         optimizer = tc.optim.Adadelta(lr=params['learning_rate'])
 elif params['opt_alg'] == 'adagrad':  # also has initial_accumulator_value parameter
@@ -408,12 +417,12 @@ class loss(_WeightedLoss):
                             tc.mean(tc.square(tc.squeeze(g_list[count_shifts_middle + 1])),
                                     1)) + denominator_nonzero
                     else:
-                        loss3_denominator = tc.tensor(1.0)  # .double
+                        loss3_denominator = tc.tensor(1.0)
                     loss3 = loss3 + params['mid_shift_lam'] * tc.true_divide(
                         tc.mean(tc.mean(tc.square(next_step - g_list[count_shifts_middle + 1]), 1)),
                         loss3_denominator)
                     count_shifts_middle += 1
-                omegas = []  # self.omega(next_step)
+                omegas = []
                 for j in tc.arange(params['num_complex_pairs']):
                     ind = 2 * j
                     pair_of_columns = next_step[:, ind:ind + 2]
@@ -437,7 +446,7 @@ class loss(_WeightedLoss):
             Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
             Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
         else:
-            Linf1_den = tc.tensor(1.0)  # .double
+            Linf1_den = tc.tensor(1.0)
             Linf2_den = tc.tensor(1.0)
 
         Linf1_penalty = tc.true_divide(
@@ -448,243 +457,90 @@ class loss(_WeightedLoss):
         return loss1 + loss2 + loss3 + loss_Linf   # regularized_loss -- loss + regularization
 
 
-
 # ============== End choose loss ==================
 
+best_error = 10000
+finished = 0
+network = network.train()
 reg_loss_fn = regularized_loss()
 reg_loss1_fn = regularized_loss1()
 loss_fn = loss()
-
-# =================== FL methods (EDITABLE) ====================
-def LocalTraining(worker_id: int, init_model: dict, pipe_upload, pipe_download, params):
-    network = net.koopman_net(params, task=task)
-    network.load_state_dict(init_model)
-    print("Model's state_dict:")
-    for param_tensor in network.state_dict():
-        print(param_tensor, "\t", network.state_dict()[param_tensor].size())
-    pipe_download.recv()
-    while True:
-        best_error = 10000
-        finished = 0
-        for f in range(params['data_train_len'] * params['num_passes_per_file']):
-            if f % 10 == 0:
-                print("current iteration: ", f + 1)
-                if f >= 250:
-                    finished = True
-            if finished:
-                break
-            file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
-            if (params['data_train_len'] > 1) or (f == 0):
-                data_train_tensor = _load_data(params, '../data/%s/%s_train%d_x.csv' % (
-                    params['data_name'], params['data_name'], file_num)).to(device)
-                num_examples = data_train_tensor.shape[1]
-                num_batches = int(np.floor(num_examples / params['batch_size']))
-
-            ind = tc.arange(num_examples)
-            np.random.shuffle(ind)
-            data_train_tensor = data_train_tensor[:, ind, :]
-
-            save_error = []
-            for step in range(params['num_steps_per_batch'] * num_batches):
-                if params['batch_size'] < data_train_tensor.shape[1]:
-                    offset = (step * params['batch_size']) % (num_examples - params['batch_size'])
-                else:
-                    offset = 0
-                batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
-                y, g_list = network(batch_data_train)
-                regularized_loss = reg_loss_fn(network, params, network.parameters(), batch_data_train, y,
-                                           g_list)  # regularized_lossregularized_loss
-                regularized_loss1 = reg_loss1_fn(params, network.parameters(), batch_data_train, y, g_list)
-                if (not network.params['been5min']) and network.params['auto_first']:
-                    optimizer_autoencoder.zero_grad()
-                    regularized_loss1.backward()
-                    optimizer_autoencoder.step()
-
-                else:
-                    optimizer.zero_grad()
-                    regularized_loss.backward()
-                    optimizer.step()
-
-                """for name, param in network.named_parameters():
-                    if param.grad is not None:
-                        print(name, param.grad.sum())
-                    else:
-                        print(name, param.grad)
-                after = list(network.parameters())"""
-
-                if step % 20 == 0:
-                    y, g_list = network(data_val_tensor)
-                    val_error = loss_fn(network, params, network.model_params, data_val_tensor, y, g_list)  # reg_val_err
-                    if val_error.item() < (best_error - best_error * (10 ** (-5))):
-                        best_error = val_error.item()  # .copy()
-                        reg_val_error = reg_loss_fn(network, params, network.model_params, data_val_tensor, y, g_list)
-                        print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
-                        best_error, regularized_loss.item(), reg_val_error.item()))
-                    with open("results/fl/worker_"+str(worker_id)+"b_"+str(params['batch_size'])+"_lr_"+str(params['learning_rate'])+".txt", "a") as file_object:
-                        file_object.write(
-                            str(best_error) + ' ' + str(regularized_loss.item()) + ' ' + str(reg_val_error.item()) + "\n")
-                if step > params['num_steps_per_file_pass']:
-                    params['stop_condition'] = 'reached num_steps_per_file_pass'
-                    break
-
-        if device == 'cuda':
-            tp = copy.deepcopy(network)
-            tp.to('cpu')
-            pipe_upload.send((tp.state_dict().copy(), tp.size_trainingset, tp.history_loss_train))
-        elif device == 'cpu':
-            pipe_upload.send((network.state_dict().copy(), network.size_trainingset, network.history_loss_train))
-        print('Worker '+str(worker_id)+' done.')
-        global_model = pipe_download.recv()
-        network.load_state_dict(global_model)
-        pass
-
-
-def Aggregation():
-    final_model = {}
-    if aggregation_rule == 'FedAvg':
-        final_model = FedKoopman(current_local_models, size_local_dataset)
-        pass
-    return final_model.copy()
-
-
-# =================== FL methods (EDITABLE) ====================
-# =================== Statistic methods ====================
-def Statistic(keep_graph=False):
-    global test_model
-    global local_loss_list
-    plt.xlabel('Iteration', fontsize=13)
-    plt.ylabel('Accuracy', fontsize=13)
-    for l in range(0, num_worker):
-        plt.plot(local_loss_list[l], color = colors[l])
-    plt.plot(test_model.history_acc_benign, linestyle='--', label='acc_global')
-    plt.plot(test_model.history_acc_poisoned, linestyle='--', label='acc_poisoned')
-    plt.legend()
-    plt.grid()
-    if not keep_graph:
-        plt.pause(0.01)
-        plt.cla()
-    else:
-        plt.ioff()
-        plt.show()
-
-# =================== Statistic methods ====================
-
-# main process
-if __name__ == '__main__':
-    set_defaults(params)
-    processing.set_start_method('spawn')
-    # =================== global variables/containers ====================
-    # pool to store parallel threading of training or attacking
-    process_pool = []
-
-    # upload link pipelines
-    model_pipeline_upload = []
-
-    # download link pipelines
-    model_pipeline_download = []
-
-    # local training loss
-    local_loss_list = []
-
-    # global gradient
-    global_gradient = {}
-
-    # global iteration counter
-    cnt_global_iteration = 0
-
-    # plot settings
-    start = 0.0
-    stop = 1.0
-    number_of_lines = num_worker
-    cm_subsection = np.linspace(start, stop, number_of_lines)
-    colors = [cm.jet(x) for x in cm_subsection]
-    # =================== global variables/containers ====================
-
-    # =================== Welcome ====================
-    print('********************************************************')
-    print('**  Welcome to PI federated learning system!   **')
-    print('********************************************************')
-    print('')
-    # =================== Welcome ====================
-
-    # =================== INITIALIZATION ====================
-    # checking global parameters
-    print('Checking global parameters......', end='')
-
-    print('Done.')
-
-    # initializing global model
-    try:
-        print('Initializing global model contrainer......', end='')
-        test_model = net.koopman_net(params, task=task)
-        test_model.to('cpu')
-        print('Done.')
-    except:
-        print('\033[31mFailed\033[0m')
-        sys.exit(-1)
-
-    # creating workers
-    for i in range(0, num_worker):
-        # creating pipelines for model's communication across processes.
-        # Note: Pipe() returns two ends of pipe: out, in
-        try:
-            print('Communication link of worker '+str(i)+'......', end='')
-            model_pipeline_upload.append(processing.Pipe())
-            model_pipeline_download.append(processing.Pipe())
-            if i < num_worker:
-                process_pool.append(processing.Process(target=LocalTraining, args=(
-                    i, test_model.state_dict().copy(), model_pipeline_upload[i][1], model_pipeline_download[i][0], params)))
-
-            print('Done.')
-            time.sleep(0.1)
-        except:
-            print('\033[31mFailed\033[0m')
-            sys.exit(-1)
-    test_model.to(device)
-    # activate worker processes
-    for i in range(0, num_worker):
-        try:
-            print('Activating worker '+str(i) +'......', end='')
-            process_pool[i].start()
-            print('Done.')
-        except:
-            print('\033[31mFailed\033[0m')
-            sys.exit(-1)
-    # switch plt into iteration mode
-    plt.ion()
-    # =================== INITIALIZATION ====================
-
-    # =================== Server process ====================
-    for pipe in model_pipeline_download:
-        pipe[1].send('start')
-    print('')
-    print('\033[32mTraining Start!\033[0m')
-    for i in range(0, global_iteration_num):
-        print('Global iteration ' + str(i) +'......')
-        start_time = time.perf_counter()
-        current_local_models = []
-        size_local_dataset = []
-        local_loss_list = []
-
-        for pipe in model_pipeline_upload:
-            msg = pipe[0].recv()
-            current_local_models.append(msg[0])
-            size_local_dataset.append(msg[1])
-            local_loss_list.append(msg[2])
-
-        global_model = Aggregation()
-        end_time = time.perf_counter()
-        print(f'Done at {time.asctime(time.localtime(time.time()))}, time cost: {end_time - start_time}s.')
-
-        test_model.load_state_dict(global_model.copy())
-        #test_model.TestOnBenignSet()
-        cnt_global_iteration += 1
-        if i == global_iteration_num - 1:
-            Statistic(keep_graph=True)
+for f in range(params['data_train_len'] * params['num_passes_per_file']):
+    if f == 0:
+        for layer in network.omega_nets_complex[0].children():
+            if isinstance(layer, nn.Linear):
+                with open("results/K_" + str(params['batch_size']) + "_lr_" + str(
+                    params['learning_rate']) + ".txt", "a") as file_object:
+                    file_object.write(str(layer.weight) + "\n")
+    if f % 10 == 0:
+        print("current iteration: ", f + 1)
+    if finished:
+        break
+    file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
+    if (params['data_train_len'] > 1) or (f == 0):
+        data_train_tensor = _load_data(params, '../data/%s/%s_train%d_x.csv' % (
+        params['data_name'], params['data_name'], file_num)).to(device)
+        num_examples = data_train_tensor.shape[1]
+        num_batches = int(np.floor(num_examples / params['batch_size']))
+    ind = tc.arange(num_examples)
+    np.random.shuffle(ind)
+    data_train_tensor = data_train_tensor[:, ind, :]
+    save_error = []
+    for step in range(params['num_steps_per_batch'] * num_batches):
+        if params['batch_size'] < data_train_tensor.shape[1]:
+            offset = (step * params['batch_size']) % (num_examples - params['batch_size'])
         else:
-            Statistic()
-        for pipe in model_pipeline_download:
-            pipe[1].send(global_model.copy())
-    # =================== Server process ====================
-    print(test_model.history_acc_benign)
+            offset = 0
+        batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
+        y, g_list = network(batch_data_train)
+        regularized_loss = reg_loss_fn(network, params, nn.ParameterList(network.parameters()), batch_data_train, y,
+                                   g_list)  # regularized_lossregularized_loss
+        regularized_loss1 = reg_loss1_fn(params, nn.ParameterList(network.parameters()), batch_data_train, y)
+        if (not network.params['been5min']) and network.params['auto_first']:
+            optimizer_autoencoder.zero_grad()
+            regularized_loss1.backward()
+            optimizer_autoencoder.step()
+        else:
+            optimizer.zero_grad()
+            regularized_loss.backward()
+            optimizer.step()
 
+        for name, param in network.named_parameters():
+            if param.grad is not None:
+                print(name, param.grad.sum())
+            else:
+                print(name, param.grad)
+
+        if step % 20 == 0:
+            if step == 0:
+
+                """for layer in network.omega_nets_complex[1].children():
+                    if isinstance(layer, nn.Linear):
+                        print(layer.weight)"""
+            # train_error = network.regularized_loss(batch_data_train, y, g_list) # reg_train_err
+            y, g_list = network(data_val_tensor)
+            val_error = loss_fn(network, params, data_val_tensor, y, g_list)  # reg_val_err
+            if val_error.item() < (best_error - best_error * (10 ** (-5))):
+                best_error = val_error.item()  # .copy()
+                reg_val_error = reg_loss_fn(network, params, nn.ParameterList(network.parameters()), data_val_tensor, y, g_list)
+                print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
+                    best_error, regularized_loss.item(), reg_val_error.item()))
+            with open("results/tc_error_"+str(params['batch_size'])+"_lr_"+str(params['learning_rate'])+".txt", "a") as file_object:
+                file_object.write(
+                    str(best_error) + ' ' + str(regularized_loss.item()) + ' ' + str(reg_val_error.item()) + "\n")
+
+        if step > params['num_steps_per_file_pass'] or best_error < 2 * 10**(-4):
+            params['stop_condition'] = 'reached num_steps_per_file_pass'
+            finished = True
+            for layer in network.omega_nets_complex[0].children():
+                if isinstance(layer, nn.Linear):
+                    with open("results/K_" + str(params['batch_size']) + "_lr_" + str(
+                            params['learning_rate']) + ".txt", "a") as file_object:
+                        file_object.write(str(layer.weight) + "\n")
+            break
+
+# if device == 'cuda':
+# tp = copy.deepcopy(network)
+# tp.to('cpu')
+# elif device == 'cpu':
+print("done")
