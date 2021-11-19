@@ -1,6 +1,6 @@
 # =================== general global parameters (EDITABLE) ====================
 # number of clients
-num_worker = 1
+num_worker = 4
 
 # number of global iteration
 global_iteration_num = 20

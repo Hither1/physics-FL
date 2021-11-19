@@ -1,3 +1,10 @@
+'''
+    helper functions for training
+    Author: Huangyuan Su
+    Email: suhither@gmail.com
+    Date: Nov 2021
+'''
+
 import datetime
 import pickle
 import time

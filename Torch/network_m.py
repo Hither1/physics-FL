@@ -1,5 +1,9 @@
 '''
-    This file contains a network structure that's essentially the same
+    This file contains a network structure that's essentially the same as in network.py
+    but with 2 additional fc layers added at
+    Author: Huangyuan Su
+    Email: suhither@gmail.com
+    Date: Nov 2021
 '''
 
 import pandas as pd

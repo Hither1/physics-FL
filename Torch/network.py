@@ -1,3 +1,10 @@
+'''
+    This file contains the original network structure that's
+
+    Author: Huangyuan Su
+    Email: suhither@gmail.com
+    Date: Nov 2021
+'''
 import pandas as pd
 import torch as tc
 import torch.nn as nn
