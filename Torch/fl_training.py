@@ -1,7 +1,5 @@
 import os
 import time
-
-import numpy as np
 import torch as tc
 import torch.distributed as dist
 import pandas as pd
@@ -91,7 +89,7 @@ params['auto_first'] = 1
 # settings related to training
 params['num_passes_per_file'] = 15 * 6 * 50
 params['num_steps_per_batch'] = 2
-params['learning_rate'] = 10 ** (-3)  # -3
+params['learning_rate'] = 5 * 10 ** (-4)  # -3
 
 # settings related to timing
 params['max_time'] = 6 * 60 * 60  # 6 hours
@@ -115,16 +113,6 @@ steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
 params['Linf_lam'] = 10 ** (-r.randint(7, 10))
-
-d = r.randint(1, 2)
-if d == 1:
-    wopts = np.arange(100, 200, 5)
-    w = wopts[r.randint(0, len(wopts) - 1)]
-    params['widths'] = [n, w, k, k, w, n]
-elif d == 2:
-    wopts = np.arange(30, 90, 5)
-    w = wopts[r.randint(0, len(wopts) - 1)]
-    params['widths'] = [n, w, w, k, k, w, w, n]
 
 do = r.randint(1, 2)
 if do == 1:
@@ -171,26 +159,24 @@ class regularized_loss1(_WeightedLoss):
         denominator_nonzero = 10 ** (-5)
         # loss1 -- autoencoder loss
         if params['relative_loss']:
-            loss1_denominator = tc.reduce_mean(
+            loss1_denominator = tc.mean(
                 tc.mean(tc.square(tc.squeeze(x[0, :, :])), 1)) + denominator_nonzero
         else:
-            loss1_denominator = tc.tensor(1.0)  # .double
+            loss1_denominator = 1.0  # .double
         mean_squared_error = tc.mean(tc.mean(tc.square(y[0] - tc.squeeze(x[0, :, :])), 1))
-        print("loss1_denominator", loss1_denominator)
         loss1 = params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
-        print("loss1", loss1)
         # ==== Define the regularization and add to loss. ====
         #         regularized_loss1 -- loss1 (autoencoder loss) + regularization
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
             loss_L1 = tc.norm(network.parameters(), 1).to(device)
         else:
             loss_L1 = tc.zeros([1, ], dtype=tc.float64).to(device)
+
         l2_regularizer = sum(
             [tc.sum(tc.square(m.weight)) for m in network.modules() if
              isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
         loss_L2 = params['L2_lam'] * l2_regularizer
-        print("loss_L1, loss_L2", loss_L1, loss_L2)
-        return loss1 + loss_L1 + loss_L2
+        return loss1 + loss_L2
 
 
 class regularized_loss(_WeightedLoss):
@@ -201,10 +187,10 @@ class regularized_loss(_WeightedLoss):
         denominator_nonzero = 10 ** (-5)
         # loss1 -- autoencoder loss
         if params['relative_loss']:
-            loss1_denominator = tc.reduce_mean(
+            loss1_denominator = tc.mean(
                 tc.mean(tc.square(tc.squeeze(x[0, :, :])), 1)) + denominator_nonzero
         else:
-            loss1_denominator = tc.tensor(1.0)  # .double
+            loss1_denominator = 1.0  # .double
         mean_squared_error = tc.mean(tc.mean(tc.square(y[0] - tc.squeeze(x[0, :, :])), 1))
         loss1 = params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
 
@@ -218,7 +204,7 @@ class regularized_loss(_WeightedLoss):
                     loss2_denominator = tc.mean(
                         tc.mean(tc.square(tc.squeeze(x[shift, :, :])), 1)) + denominator_nonzero
                 else:
-                    loss2_denominator = tc.tensor(1.0)  # .double
+                    loss2_denominator = 1.0  # .double
                 loss2 = loss2 + params['recon_lam'] * tc.true_divide(
                     tc.mean(tc.mean(tc.square(y[j + 1] - tc.squeeze(x[shift, :, :])), 1)),
                     loss2_denominator)
@@ -253,7 +239,7 @@ class regularized_loss(_WeightedLoss):
                             tc.mean(tc.square(tc.squeeze(g_list[count_shifts_middle + 1])),
                                     1)) + denominator_nonzero
                     else:
-                        loss3_denominator = tc.tensor(1.0)  # .double
+                        loss3_denominator = 1.0  # .double
                     loss3 = loss3 + params['mid_shift_lam'] * tc.true_divide(
                         tc.mean(tc.mean(tc.square(next_step - g_list[count_shifts_middle + 1]), 1)),
                         loss3_denominator)
@@ -282,21 +268,18 @@ class regularized_loss(_WeightedLoss):
             Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
             Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
         else:
-            Linf1_den = tc.tensor(1.0)  # .double
-            Linf2_den = tc.tensor(1.0)
-
+            Linf1_den = 1.0
+            Linf2_den = 1.0
         Linf1_penalty = tc.true_divide(
             tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
         Linf2_penalty = tc.true_divide(
             tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
-
         loss = loss1 + loss2 + loss3 + loss_Linf
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
             loss_L1 = tc.norm(network.parameters(), 1) * params['L1_lam']
         else:
             loss_L1 = tc.zeros([1, ], dtype=tc.float64)
-
         l2_regularizer = sum(
             [tc.sum(tc.square(m.weight)) for m in network.modules() if
              isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
@@ -312,10 +295,10 @@ class loss(_WeightedLoss):
         denominator_nonzero = 10 ** (-5)
         # loss1 -- autoencoder loss
         if params['relative_loss']:
-            loss1_denominator = tc.reduce_mean(
+            loss1_denominator = tc.mean(
                 tc.mean(tc.square(tc.squeeze(x[0, :, :])), 1)) + denominator_nonzero
         else:
-            loss1_denominator = tc.tensor(1.0)  # .double
+            loss1_denominator = 1.0  # .double
         mean_squared_error = tc.mean(tc.mean(tc.square(y[0] - tc.squeeze(x[0, :, :])), 1))
         loss1 = params['recon_lam'] * tc.true_divide(mean_squared_error, loss1_denominator)
         # gets dynamics/prediction loss
@@ -328,7 +311,7 @@ class loss(_WeightedLoss):
                     loss2_denominator = tc.mean(
                         tc.mean(tc.square(tc.squeeze(x[shift, :, :])), 1)) + denominator_nonzero
                 else:
-                    loss2_denominator = tc.tensor(1.0)  # .double
+                    loss2_denominator = 1.0  # .double
                 loss2 = loss2 + params['recon_lam'] * tc.true_divide(
                     tc.mean(tc.mean(tc.square(y[j + 1] - tc.squeeze(x[shift, :, :])), 1)),
                     loss2_denominator)
@@ -363,7 +346,7 @@ class loss(_WeightedLoss):
                             tc.mean(tc.square(tc.squeeze(g_list[count_shifts_middle + 1])),
                                     1)) + denominator_nonzero
                     else:
-                        loss3_denominator = tc.tensor(1.0)
+                        loss3_denominator = 1.0
                     loss3 = loss3 + params['mid_shift_lam'] * tc.true_divide(
                         tc.mean(tc.mean(tc.square(next_step - g_list[count_shifts_middle + 1]), 1)),
                         loss3_denominator)
@@ -392,8 +375,8 @@ class loss(_WeightedLoss):
             Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
             Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
         else:
-            Linf1_den = tc.tensor(1.0)
-            Linf2_den = tc.tensor(1.0)
+            Linf1_den = 1.0
+            Linf2_den = 1.0
 
         Linf1_penalty = tc.true_divide(
             tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
@@ -409,15 +392,17 @@ reg_loss_fn = regularized_loss()
 reg_loss1_fn = regularized_loss1()
 loss_fn = loss()
 # =================== FL methods (EDITABLE) ====================
-def LocalTraining(worker_id: int, pipe_upload, pipe_download, params, data_val_tensor):
+def LocalTraining(worker_id: int, pipe_upload, pipe_download, params):
     global device
     network = net.koopman_net(params, task=task)
+    set_defaults(params)
+    data_val_tensor = _load_data(params, '../data/%s/%s_val_x.csv' % (params['data_name'], params['data_name'])).to(
+        device)
     #network.load_state_dict(init_model)
     network.to(device)
     if params['opt_alg'] == 'adam':
-        optimizer, optimizer_autoencoder = tc.optim.Adam(network.parameters(),
-                                                         lr=params['learning_rate']), tc.optim.Adam(
-            network.parameters(), lr=params['learning_rate'])
+        optimizer = tc.optim.Adam(network.parameters(), lr=params['learning_rate'])
+        optimizer_autoencoder = tc.optim.Adam(network.parameters(), lr=params['learning_rate'])
     elif params['opt_alg'] == 'adadelta':
         if params['decay_rate'] > 0:
             optimizer = tc.optim.Adadelta(network.model_params, params['learning_rate'], params['decay_rate'])
@@ -465,7 +450,7 @@ def LocalTraining(worker_id: int, pipe_upload, pipe_download, params, data_val_t
                 print("current iteration: ", f + 1)
             if finished:
                 break
-            file_num = (f % params['data_train_len']) + 1  # 1...data_train_len
+            file_num = worker_id + (f % 2) * 4 + 1  # 1...data_train_len
             if (params['data_train_len'] > 1) or (f == 0):
                 data_train_tensor = _load_data(params, '../data/%s/%s_train%d_x.csv' % (
                     params['data_name'], params['data_name'], file_num)).to(device)
@@ -481,36 +466,35 @@ def LocalTraining(worker_id: int, pipe_upload, pipe_download, params, data_val_t
                     offset = 0
                 batch_data_train = data_train_tensor[:, offset:(offset + params['batch_size']), :]
                 y, g_list = network(batch_data_train)
-                regularized_loss = reg_loss_fn(network, params,
+                reg_loss = reg_loss_fn(network, params,
                                                batch_data_train, y,
                                                g_list)  # regularized_lossregularized_loss
-                regularized_loss1 = reg_loss1_fn(network, params, batch_data_train, y)
+                reg_loss1 = reg_loss1_fn(network, params, batch_data_train, y)
                 if (not network.params['been5min']) and network.params['auto_first']:
                     optimizer_autoencoder.zero_grad()
-                    regularized_loss1.backward()
+                    reg_loss1.backward()
                     optimizer_autoencoder.step()
                 else:
                     optimizer.zero_grad()
-                    regularized_loss.backward()
+                    reg_loss.backward()
                     optimizer.step()
-
-
                 if step % 20 == 0:
+
                     y, g_list = network(data_val_tensor)
                     val_error = loss_fn(network, params, data_val_tensor, y, g_list)  # reg_val_err
                     if val_error.item() < (best_error - best_error * (10 ** (-5))):
                         best_error = val_error.item()  # .copy()
                         reg_val_error = reg_loss_fn(network, params,
                                                     data_val_tensor, y, g_list)
-                        print("New best val error %f (with reg. train err %f and reg. val err %f)" % (
-                            best_error, regularized_loss.item(), reg_val_error.item()))
+                        print("New best val error %f (with reg. train err %f and reg. val err %f) of worker %d" % (
+                            best_error, reg_loss.item(), reg_val_error.item(), worker_id))
                     with open("results/fl/tc_error_" + str(params['batch_size']) + "_lr_" + str(
                             params['learning_rate']) + ".txt", "a") as file_object:
                         file_object.write(
-                            str(best_error) + ' ' + str(regularized_loss.item()) + ' ' + str(
+                            str(best_error) + ' ' + str(reg_loss.item()) + ' ' + str(
                                 reg_val_error.item()) + "\n")
 
-                if step > params['num_steps_per_file_pass'] or step + f * params['num_steps_per_batch'] * num_batches >= 200:
+                if step > params['num_steps_per_file_pass'] or step + f * params['num_steps_per_batch'] * num_batches >= 50:
                     params['stop_condition'] = 'reached num_steps_per_file_pass'
                     finished = True
                     for layer in network.omega_nets_complex[0].children():
@@ -549,10 +533,12 @@ def Aggregation():
 def Statistic(keep_graph=False):
 
     global local_loss_list
+    plt.title('')
     plt.xlabel('Iteration', fontsize=13)
-    plt.ylabel('Accuracy', fontsize=13)
+    plt.ylabel('Error', fontsize=13)
+    x = np.arange(len(local_loss_list) / num_worker)
     for l in range(0, num_worker):
-        plt.plot(local_loss_list[l], color = colors[l])
+        plt.plot(x, [local_loss_list[y] for y in range(len(local_loss_list)) if y % num_worker == l], label='Worker '+str(l))
 
     plt.legend()
     plt.grid()
@@ -560,16 +546,14 @@ def Statistic(keep_graph=False):
         plt.pause(0.01)
         plt.cla()
     else:
-        plt.ioff()
+        #plt.ioff()
         plt.show()
 
 # =================== Statistic methods ====================
 
 # main process
 if __name__ == '__main__':
-    set_defaults(params)
-    data_val_tensor = _load_data(params, '../data/%s/%s_val_x.csv' % (params['data_name'], params['data_name'])).to(
-        device)
+
     processing.set_start_method('spawn')
     # =================== global variables/containers ====================
     # pool to store parallel threading of training or attacking
@@ -623,7 +607,7 @@ if __name__ == '__main__':
             model_pipeline_download.append(processing.Pipe())
             if i < num_worker:
                 process_pool.append(processing.Process(target=LocalTraining, args=(
-                    i, model_pipeline_upload[i][1], model_pipeline_download[i][0], params, data_val_tensor)))
+                    i, model_pipeline_upload[i][1], model_pipeline_download[i][0], params)))
 
             print('Done.')
             time.sleep(0.1)
@@ -648,19 +632,19 @@ if __name__ == '__main__':
         pipe[1].send('start')
     print('')
     print('\033[32mTraining Start!\033[0m')
+    local_loss_list = []
     for i in range(0, global_iteration_num):
         print('Global iteration ' + str(i) +'......')
         start_time = time.perf_counter()
         current_local_models = []
         size_local_dataset = []
-        local_loss_list = []
+
 
         for pipe in model_pipeline_upload:
-            print(pipe[0])
             msg = pipe[0].recv()
-            print("received local model")
             current_local_models.append(msg[0])
             size_local_dataset.append(msg[1])
+            print("current error list", msg[2])
             local_loss_list.append(msg[2])
 
 
@@ -670,12 +654,14 @@ if __name__ == '__main__':
 
 
         cnt_global_iteration += 1
-        if i == global_iteration_num - 1:
-            Statistic(keep_graph=True)
-        else:
-            Statistic()
+
         for pipe in model_pipeline_download:
             pipe[1].send(global_model.copy())
+    print("loss list", local_loss_list)
+    if i == global_iteration_num - 1:
+        Statistic(keep_graph=True)
+    else:
+        Statistic()
     # =================== Server process ====================
     #print(test_model.history_acc_benign)
 

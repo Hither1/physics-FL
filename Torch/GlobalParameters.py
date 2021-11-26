@@ -3,7 +3,7 @@
 num_worker = 4
 
 # number of global iteration
-global_iteration_num = 20
+global_iteration_num = 50
 
 # number of local epoch per global iteration
 local_epoch_num = 10

@@ -212,7 +212,6 @@ def set_defaults(params):
     # defaults related to network architecture
     if 'widths' not in params:
         raise KeyError("Error, must give widths as input to main")
-    print(params['widths'])
     if 'hidden_widths_omega' not in params:
         raise KeyError("Error, must give hidden_widths for omega net")
     params['widths_omega_complex'] = [1, ] + params['hidden_widths_omega'] + [2, ]

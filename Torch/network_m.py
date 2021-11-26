@@ -13,7 +13,8 @@ from torch.autograd import Variable
 import math
 from helper_torch import *
 import csv as csv
-
+import random as r
+import numpy as np
 
 def weight_initialize(shape, layer, dist='tn', scale=0.1):
     """
@@ -68,17 +69,21 @@ class koopman_net(nn.Module):
     def __init__(self, params, task='Pendulum'): #device='cuda'
         super().__init__()
         self.params = params
-        self.task = task
-        #self.device = device
-        # self.linear = nn.Linear(256, 2)
-        depth = int((params['d'] - 4) / 2)
+        n = 2
+        wopts = np.arange(30, 90, 5)
+        w = wopts[r.randint(0, len(wopts) - 1)]
+        params['widths'] = [n, w, w, params['num_evals'], params['num_evals'], w, w, n]
+        set_defaults(params)
 
+        self.task = task
+        depth = int((params['d'] - 4) / 2)
         max_shifts_to_stack = num_shifts_in_stack(params)
 
         encoder_widths = params['widths'][0:depth + 2]  # n ... k
         print("encoder widths", encoder_widths)
         num_widths = len(params['widths'])
         decoder_widths = params['widths'][depth + 2:num_widths]  # k ... n
+        print("decoder widths", decoder_widths)
         # encoder_widths,  num_encoder_weights = 1
 
         #dist_biases=params['dist_biases'][0:depth + 1],
@@ -93,13 +98,12 @@ class koopman_net(nn.Module):
                 encoder_layers.append(nn.ReLU())
             elif params['act_type'] == "elu":
                 encoder_layers.append(nn.ELU(True))
-        fc_layer = nn.Linear(encoder_widths[len(encoder_widths)-2], encoder_widths[len(encoder_widths)-1])
-        fc_layer = weight_initialize([encoder_widths[len(encoder_widths)-2], encoder_widths[len(encoder_widths)-1]], fc_layer,
+        fc_layer = nn.Linear(encoder_widths[-2], encoder_widths[-1])
+        fc_layer = weight_initialize([encoder_widths[-2], encoder_widths[-1]], fc_layer,
                                      params['dist_weights'][0:depth + 1][len(encoder_widths)-2], params['scale'])
         encoder_layers.append(fc_layer)
         self.encoder = nn.Sequential(*encoder_layers).double()
 
-        #self.omega = omega_net(params, self.device)
         # params['num_encoder_weights'] = len(weights)/already done inside create_omega_net
 
         decoder_layers = []
@@ -109,15 +113,16 @@ class koopman_net(nn.Module):
             fc_layer = weight_initialize([decoder_widths[i], decoder_widths[i + 1]], fc_layer, params['scale'])
             decoder_layers.append(fc_layer)
             if params['act_type'] == "sigmoid":
-                decoder_layers.append(nn.Sigmoid(True))
+                decoder_layers.append(nn.Sigmoid())
             elif params['act_type'] == "relu":
                 decoder_layers.append(nn.ReLU())
             elif params['act_type'] == "elu":
-                decoder_layers.append(nn.ELU(True))
-        fc_layer = nn.Linear(decoder_widths[len(decoder_widths) - 2], decoder_widths[len(decoder_widths)-1])
-        fc_layer = weight_initialize([decoder_widths[len(decoder_widths) - 2], decoder_widths[len(decoder_widths) - 1]], fc_layer, params['scale'])
+                decoder_layers.append(nn.ELU())
+        fc_layer = nn.Linear(decoder_widths[-2], decoder_widths[-1])
+        fc_layer = weight_initialize([decoder_widths[-2], decoder_widths[-1]], fc_layer, params['scale'])
         decoder_layers.append(fc_layer)
         self.decoder = nn.Sequential(*decoder_layers).double()
+
         self.omega_nets_complex, self.omega_nets_real = nn.ModuleList(), nn.ModuleList()
         for j in tc.arange(params['num_complex_pairs']):
             omega_net_layers = []
@@ -157,25 +162,13 @@ class koopman_net(nn.Module):
             fc_layer = nn.Linear(params['widths_omega_real'][-2], params['widths_omega_real'][-1])
             fc_layer = weight_initialize([params['widths_omega_real'][-2], params['widths_omega_real'][-1]], fc_layer,
                                          params['scale_omega'])
+            omega_net_layers.append(fc_layer)
             omega_net = nn.Sequential(*omega_net_layers).double()
-            #self.omega_parameters_real += nn.ParameterList(omega_net.parameters())
             self.omega_nets_real.append(omega_net)
 
-
         #params['num_decoder_weights'] = depth + 1
-        # datasets
 
     def form_complex_conjugate_block(self, omegas, delta_t):
-        """Form a 2x2 block for a complex conj. pair of eigenvalues, but for each example, so dimension [None, 2, 2]
-        2x2 Block is
-        exp(mu * delta_t) * [cos(omega * delta_t), -sin(omega * delta_t)
-                             sin(omega * delta_t), cos(omega * delta_t)]
-        Arguments:
-            omegas -- array of parameters for blocks. first column is freq. (omega) and 2nd is scaling (mu), size [None, 2]
-            delta_t -- time step in trajectories from input data
-        Returns:
-            stack of 2x2 blocks, size [None, 2, 2], where first dimension matches first dimension of omegas
-        """
         scale = tc.exp(omegas[:, 1] * delta_t)
         entry11 = tc.mul(scale, tc.cos(omegas[:, 0] * delta_t))
         entry12 = tc.mul(scale, tc.sin(omegas[:, 0] * delta_t))
@@ -184,14 +177,6 @@ class koopman_net(nn.Module):
         return tc.stack([row1, row2], dim=2)  # [None, 2, 2] put one row below other
 
     def varying_multiply(self, y, omegas, delta_t, num_real, num_complex_pairs):
-        """Multiply y-coordinates on the left by matrix L, but let matrix vary.
-        Arguments:
-            y -- array of shape [None, k] of y-coordinates, where L will be k x k
-            omegas -- list of arrays of parameters for the L matrices
-            delta_t -- time step in trajectories from input data
-            num_real -- number of real eigenvalues
-            num_complex_pairs -- number of pairs of complex conjugate eigenvalues
-        """
         complex_list = []
 
         # first, Jordan blocks for each pair of complex conjugate eigenvalues
@@ -224,9 +209,7 @@ class koopman_net(nn.Module):
             return real_part
 
     def forward(self, x):
-        #g_list = []
         x_shift_list = []
-        x = x.double()
         num_shifts_middle = len(self.params['shifts_middle'])
         for j in tc.arange(num_shifts_middle + 1):
             if j == 0:
@@ -273,9 +256,13 @@ class koopman_net(nn.Module):
 
             # considering penalty on subset of yk+1, yk+2, yk+3, ...
             if (j + 1) in tc.tensor(self.params['shifts']):
+                #print("checking", self.decoder(advanced_layer))
+
                 y = tc.cat(
                     [y,
-                     tc.unsqueeze(self.decoder(advanced_layer), 0)])
+                     tc.unsqueeze(
+                         self.decoder(advanced_layer),
+                         0)])
             omegas = [] #self.omega(advanced_layer)
             for j in tc.arange(self.params['num_complex_pairs']):
                 ind = 2 * j
