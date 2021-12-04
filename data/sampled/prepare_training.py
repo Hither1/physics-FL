@@ -12,7 +12,7 @@ def logistic_R_0(t, R_0_start, k, x0, R_0_end):
 
 #with h5py.File("../raw-data/sampled/sir_training_rk.hdf5", "w") as f:
 S, I, R = [], [], []
-for j in range(7):
+for j in range(1, 9):
     for i in range(2):
         k, b = random.random(), random.random()
 
@@ -46,10 +46,10 @@ for j in range(7):
 
             return dSdt, dIdt, dRdt
 
-        t, S, I, R = Model(257, 1/3, 0.5)#k, b) # 2048, 256,
+        t, S, I, R = Model(178500, k, b) # 2048, 256,
 
     df = pd.DataFrame(np.array([S, I, R]).T)
-    df.to_csv("../SIR_train_"+str(j)+".csv", index=False)
+    df.to_csv("../SIR/SIR_train"+str(j)+"_x.csv", index=False, header=False)
 
 '''plt.plot(t, S, label='S')
         plt.plot(t, I, label='I')
