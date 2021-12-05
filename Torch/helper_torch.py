@@ -258,7 +258,7 @@ def set_defaults(params):
     if 'scale_omega' not in params:
         print("setting default: scale for weights in omega net is 0.1 (applies to tn distribution)")
         params['scale_omega'] = 0.1
-
+    ### here it is Huajie Shao
     if isinstance(params['dist_weights'], str):
         params['dist_weights'] = [params['dist_weights']] * (len(params['widths']) - 1)
     if isinstance(params['dist_biases'], int):

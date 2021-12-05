@@ -58,9 +58,9 @@ def _load_data(params, DATA_PATH):
 params = {}
 
 # settings related to dataset
-params['data_name'] = 'Pendulum'  # 'SIR'
+params['data_name'] = 'SIR'
 params['len_time'] = 51
-n = 2  # dimension of system (and input layer)
+#n = 3  # dimension of system (and input layer)
 num_initial_conditions = 5000  # per training file
 params['delta_t'] = 0.02
 
@@ -89,7 +89,7 @@ params['auto_first'] = 1
 # settings related to training
 params['num_passes_per_file'] = 15 * 6 * 50
 params['num_steps_per_batch'] = 2
-params['learning_rate'] = 5 * 10 ** (-4)  # -3
+params['learning_rate'] = 1 * 10 ** (-3)  # -3
 
 # settings related to timing
 params['max_time'] = 6 * 60 * 60  # 6 hours
@@ -111,6 +111,7 @@ params['data_train_len'] = r.randint(3, 6)
 params['batch_size'] = 64  # int(2 ** (r.randint(7, 9)))
 steps_to_see_all = num_examples / params['batch_size']
 params['num_steps_per_file_pass'] = (int(steps_to_see_all) + 1) * params['num_steps_per_batch']
+print("params['num_steps_per_file_pass']", params['num_steps_per_file_pass'])
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
 params['Linf_lam'] = 10 ** (-r.randint(7, 10))
 
@@ -271,9 +272,9 @@ class regularized_loss(_WeightedLoss):
             Linf1_den = 1.0
             Linf2_den = 1.0
         Linf1_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
+            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf1_den)
         Linf2_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
+            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf2_den)
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
         loss = loss1 + loss2 + loss3 + loss_Linf
         if params['L1_lam']:  # loss_L1 -- L1 regularization on weights W and b
@@ -285,7 +286,7 @@ class regularized_loss(_WeightedLoss):
              isinstance(m, nn.Linear)])  # loss_L2 -- L2 regularization on weights W
 
         loss_L2 = params['L2_lam'] * l2_regularizer
-        return loss + loss_L1 + loss_L2  # regularized_loss -- loss + regularization
+        return loss.to(device) + loss_L1.to(device) + loss_L2.to(device)  # regularized_loss -- loss + regularization
 
 class loss(_WeightedLoss):
     def __init__(self):
@@ -372,18 +373,18 @@ class loss(_WeightedLoss):
             loss3 = loss3 / params['num_shifts_middle']
         # inf norm on autoencoder error and one prediction step
         if params['relative_loss']:
-            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
-            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
+            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=float('inf'), dim=1)) + denominator_nonzero
+            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=float('inf'), dim=1)) + denominator_nonzero
         else:
             Linf1_den = 1.0
             Linf2_den = 1.0
 
         Linf1_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
+            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf1_den)
         Linf2_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
+            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf2_den)
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
-        return loss1 + loss2 + loss3 + loss_Linf   # regularized_loss -- loss + regularization
+        return loss1.to(device) + loss2.to(device) + loss3.to(device) + loss_Linf.to(device)   # regularized_loss -- loss + regularization
 
 
 
@@ -523,6 +524,9 @@ def LocalTraining(worker_id: int, pipe_upload, pipe_download, params):
 def Aggregation():
     final_model = {}
     if aggregation_rule == 'FedAvg':
+        final_model = FedAvg(current_local_models, size_local_dataset)
+        pass
+    elif aggregation_rule == 'FedKoopman':
         final_model = FedKoopman(current_local_models, size_local_dataset)
         pass
     return final_model.copy()
@@ -664,4 +668,5 @@ if __name__ == '__main__':
         Statistic()
     # =================== Server process ====================
     #print(test_model.history_acc_benign)
+
 

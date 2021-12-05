@@ -69,7 +69,7 @@ class koopman_net(nn.Module):
     def __init__(self, params, task='Pendulum'): #device='cuda'
         super().__init__()
         self.params = params
-        n = 2
+        n = 3
         wopts = np.arange(30, 90, 5)
         w = wopts[r.randint(0, len(wopts) - 1)]
         params['widths'] = [n, w, w, params['num_evals'], params['num_evals'], w, w, n]
@@ -90,7 +90,7 @@ class koopman_net(nn.Module):
         encoder_layers = []
         for i in tc.arange(len(encoder_widths) - 2):
             fc_layer = nn.Linear(encoder_widths[i], encoder_widths[i + 1])
-            fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, params['dist_weights'][0:depth + 1][i], params['scale'])
+            fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, dist=params['dist_weights'][0:depth + 1][i], scale=params['scale'])
             encoder_layers.append(fc_layer)
             if params['act_type'] == "sigmoid":
                 encoder_layers.append(nn.Sigmoid(True))

@@ -40,6 +40,7 @@ def weight_initialize(shape, layer, dist='tn', scale=0.1):
         scale = tc.sqrt(6.0 / (tc.tensor(shape[0]) + tc.tensor(shape[1])))
         nn.init.uniform_(layer.weight, a=-scale, b=scale)
     else:
+        print("***Enter no initializtion****")
         '''initial = np.loadtxt(dist, delimiter=',', dtype=np.float64)
         if (initial.shape[0] != shape[0]) or (initial.shape[1] != shape[1]):
             raise ValueError(
@@ -63,12 +64,22 @@ def bias_initialize(layer, distribution=''):
     return layer
 
 
+### DEFINE Deocder and Encoder Below #####
+# def encoder_fun():
+
+
+# def decoder_fun():
+
+
+## def omega_network()
+
 
 
 class koopman_net(nn.Module):
     def __init__(self, params, task='Pendulum'):
         super().__init__()
         self.params = params
+        # self.params['weight'] = 0
         n = 3
         wopts = np.arange(100, 200, 5)
         w = wopts[r.randint(0, len(wopts) - 1)]
@@ -77,16 +88,18 @@ class koopman_net(nn.Module):
 
         self.task = task
         depth = int((params['d'] - 4) / 2)
-        max_shifts_to_stack = num_shifts_in_stack(params)
+        max_shifts_to_stack = num_shifts_in_stack(self.params)
         encoder_widths = params['widths'][0:depth + 2]  # n ... k
         num_widths = len(params['widths'])
         decoder_widths = params['widths'][depth + 2:num_widths]  # k ... n
 
         #dist_biases=params['dist_biases'][0:depth + 1],
         encoder_layers = []
+        print("model paras tn,", self.params['dist_weights'])
         for i in tc.arange(len(encoder_widths) - 2):
             fc_layer = nn.Linear(encoder_widths[i], encoder_widths[i + 1])
-            fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, params['dist_weights'][0:depth + 1][i], params['scale'])
+            ### 
+            fc_layer = weight_initialize([encoder_widths[i], encoder_widths[i + 1]], fc_layer, dist=self.params['dist_weights'][0:depth + 1][i], scale=params['scale'])
             encoder_layers.append(fc_layer)
             if params['act_type'] == "sigmoid":
                 encoder_layers.append(nn.Sigmoid(True))
@@ -96,7 +109,7 @@ class koopman_net(nn.Module):
                 encoder_layers.append(nn.ELU(True))
         fc_layer = nn.Linear(encoder_widths[-2], encoder_widths[-1])
         fc_layer = weight_initialize([encoder_widths[-2], encoder_widths[-1]], fc_layer,
-                                     params['dist_weights'][0:depth + 1][len(encoder_widths)-2], params['scale'])
+                                     dist=params['dist_weights'][0:depth + 1][len(encoder_widths)-2], scale=params['scale'])
         encoder_layers.append(fc_layer)
         self.encoder = nn.Sequential(*encoder_layers).double()
 
@@ -106,7 +119,7 @@ class koopman_net(nn.Module):
         for i in tc.arange(len(decoder_widths) - 2):
             ind = i + 1
             fc_layer = nn.Linear(decoder_widths[i], decoder_widths[i + 1])
-            fc_layer = weight_initialize([decoder_widths[i], decoder_widths[i + 1]], fc_layer, params['scale'])
+            fc_layer = weight_initialize([decoder_widths[i], decoder_widths[i + 1]], fc_layer, scale=self.params['scale']) #miss
             decoder_layers.append(fc_layer)
             if params['act_type'] == "sigmoid":
                 decoder_layers.append(nn.Sigmoid())
@@ -115,7 +128,7 @@ class koopman_net(nn.Module):
             elif params['act_type'] == "elu":
                 decoder_layers.append(nn.ELU())
         fc_layer = nn.Linear(decoder_widths[-2], decoder_widths[-1])
-        fc_layer = weight_initialize([decoder_widths[-2], decoder_widths[-1]], fc_layer, params['scale'])
+        fc_layer = weight_initialize([decoder_widths[-2], decoder_widths[-1]], fc_layer, scale=self.params['scale'])
         decoder_layers.append(fc_layer)
         self.decoder = nn.Sequential(*decoder_layers).double()
 
@@ -125,7 +138,7 @@ class koopman_net(nn.Module):
             for i in tc.arange(len(params['widths_omega_complex']) - 2):
                 ind = i + 1
                 fc_layer = nn.Linear(params['widths_omega_complex'][i], params['widths_omega_complex'][i + 1])
-                fc_layer = weight_initialize([params['widths_omega_complex'][i], params['widths_omega_complex'][i + 1]], fc_layer, params['scale_omega'])
+                fc_layer = weight_initialize([params['widths_omega_complex'][i], params['widths_omega_complex'][i + 1]], fc_layer, scale=params['scale_omega'])
                 omega_net_layers.append(fc_layer)
                 if params['act_type'] == "sigmoid":
                     omega_net_layers.append(nn.Sigmoid(True))
@@ -223,7 +236,7 @@ class koopman_net(nn.Module):
             return real_part
 
     def forward(self, x):
-        print("checking len of input", x.size())
+        # print("checking len of input", x.size())
         x_shift_list = []
         num_shifts_middle = len(self.params['shifts_middle'])
         for j in tc.arange(num_shifts_middle + 1):
@@ -271,11 +284,11 @@ class koopman_net(nn.Module):
 
             # considering penalty on subset of yk+1, yk+2, yk+3, ...
             if (j + 1) in tc.tensor(self.params['shifts']):
-                y = tc.cat(
-                    [y,
-                     tc.unsqueeze(
-                         self.decoder(advanced_layer),
-                         0)])
+                ## Bug is here
+                print("BUG is here >>>: ",self.decoder(advanced_layer))
+                # print('fc_layer: ', tc.isnan(self.decoder(advanced_layer)).any())
+
+                y = tc.cat([y,tc.unsqueeze(self.decoder(advanced_layer),0)])
             omegas = [] #self.omega(advanced_layer)
             for j in tc.arange(self.params['num_complex_pairs']):
                 ind = 2 * j
@@ -303,3 +316,4 @@ class koopman_net(nn.Module):
             raise ValueError(
                 'length(y) not proper length: check create_koopman_net code and how defined params[shifts] in experiment')
         return y, g_list
+        

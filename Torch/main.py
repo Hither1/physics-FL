@@ -121,6 +121,9 @@ params['L1_lam'] = 10 ** (-r.randint(13, 14))
 params['L2_lam'] = 10 ** (-r.randint(13, 14))
 params['Linf_lam'] = 10 ** (-r.randint(7, 10))
 
+##
+# set_defaults(params)
+
 do = r.randint(1, 2)
 if do == 1:
     wopts = np.arange(140, 190, 5)
@@ -323,16 +326,16 @@ class regularized_loss(_WeightedLoss):
             loss3 = loss3 / params['num_shifts_middle']
         # inf norm on autoencoder error and one prediction step
         if params['relative_loss']:
-            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
-            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
+            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=float('inf'), dim=1)) + denominator_nonzero
+            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=float('inf'), dim=1)) + denominator_nonzero
         else:
             Linf1_den = 1.0  # .double
             Linf2_den = 1.0
 
         Linf1_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
+            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf1_den)
         Linf2_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
+            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf2_den)
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
 
         loss = loss1 + loss2 + loss3 + loss_Linf
@@ -436,16 +439,16 @@ class loss(_WeightedLoss):
             loss3 = loss3 / params['num_shifts_middle']
         # inf norm on autoencoder error and one prediction step
         if params['relative_loss']:
-            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
-            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=tc.inf, dim=1)) + denominator_nonzero
+            Linf1_den = tc.norm(tc.norm(tc.squeeze(x[0, :, :]), p=float('inf'), dim=1)) + denominator_nonzero
+            Linf2_den = tc.norm(tc.norm(tc.squeeze(x[1, :, :]), p=float('inf'), dim=1)) + denominator_nonzero
         else:
             Linf1_den = 1.0
             Linf2_den = 1.0
 
         Linf1_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf1_den)
+            tc.norm(tc.norm(y[0] - tc.squeeze(x[0, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf1_den)
         Linf2_penalty = tc.true_divide(
-            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=tc.inf, dim=1), p=tc.inf), Linf2_den)
+            tc.norm(tc.norm(y[1] - tc.squeeze(x[1, :, :]), p=float('inf'), dim=1), p=float('inf')), Linf2_den)
         loss_Linf = params['Linf_lam'] * (Linf1_penalty + Linf2_penalty)
         return loss1 + loss2 + loss3 + loss_Linf   # regularized_loss -- loss + regularization
 
